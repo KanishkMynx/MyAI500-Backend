@@ -12,7 +12,7 @@ const auth = new google.auth.GoogleAuth({
 });
 
 // Leaving calendar ID here it should give you a public view of calendar
-const calendarId = '57a23d6a816a56a71ba0eee7f9815476fde5d4f7f3faf2f6f42ac0c182fa1d9a@group.calendar.google.com';
+const calendarId = '5e8e29a689c0ec7f93a3ed065f7ad6f21e25696863e8977f10fd6dc6cc8ef4cf@group.calendar.google.com';
 
 const calendar = google.calendar({ version: 'v3', auth });
 
@@ -77,14 +77,13 @@ const getAvailableTimeSlots = async () => {
   }
 };
 
-function bookTimeSlot(time, name) {
-  // will add email later to send invite to person as well
+function bookTimeSlot(time, name, email) { // Added 'email' parameter
   let [hour, _minute] = time.split(':');
   let [minute, timeOfDay] = _minute.split(' ');
   const calendar = google.calendar({ version: 'v3', auth });
   
-  hour = timeOfDay.includes('AM') ? hour :  parseInt(hour) + 12, 
-  minute= minute.split(' ')[0];
+  hour = timeOfDay.includes('AM') ? hour : parseInt(hour) + 12;
+  minute = minute.split(' ')[0];
 
   console.log(hour, minute);
 
@@ -107,6 +106,7 @@ function bookTimeSlot(time, name) {
       dateTime: appointmentEndTime.toISOString(),
       timeZone: 'Asia/Kolkata',
     },
+    attendees: email ? [{ email }] : [], // Add user as attendee if email is provided
     reminders: {
       useDefault: false,
       overrides: [
@@ -114,19 +114,17 @@ function bookTimeSlot(time, name) {
         { method: 'popup', minutes: 10 }, // 10 minutes before
       ],
     },
+    sendUpdates: 'all', // Ensures the user gets an email notification
   };
 
   calendar.events.insert(
     {
-      calendarId: calendarId, // Replace with your calendar ID if necessary
+      calendarId: calendarId,
       resource: event,
     },
     (err, event) => {
       if (err) {
-        console.error(
-          'There was an error contacting the Calendar service:',
-          err
-        );
+        console.error('There was an error contacting the Calendar service:', err);
         return;
       }
       console.log('Event created: %s', event.data.htmlLink);
@@ -135,5 +133,8 @@ function bookTimeSlot(time, name) {
 
   return event;
 }
+
+// Update the export to reflect the new function signature
+
 
 module.exports = { getAvailableTimeSlots, bookTimeSlot };

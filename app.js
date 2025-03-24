@@ -15,7 +15,7 @@ const VoiceResponse = require('twilio').twiml.VoiceResponse;
 const app = express();
 ExpressWs(app);
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 8000;
 
 app.post('/incoming', (req, res) => {
   try {
@@ -85,7 +85,7 @@ app.ws('/connection', (ws) => {
   
     transcriptionService.on('transcription', async (text) => {
       if (!text) { return; }
-      console.log(`Interaction ${interactionCount} – STT -> GPT: ${text}`.yellow);
+      console.log(`Interaction ${interactionCount} - STT -> GPT: ${text}`.yellow);
       gptService.completion(text, interactionCount);
       interactionCount += 1;
     });

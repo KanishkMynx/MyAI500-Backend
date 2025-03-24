@@ -1,15 +1,14 @@
-const {bookTimeSlot} = require('../services/calendar-service');
+const { bookTimeSlot } = require('../services/calendar-service');
 
 async function bookAppointment(functionArgs) {
-  const time = functionArgs.time;
-  const name = functionArgs.name;
-  console.log('GPT -> called checkTimeSlots function');
+  const { time, name, email } = functionArgs; // Destructured to include email
+  console.log('GPT -> called bookAppointment function');
   
-  if (time && name) {
-    await bookTimeSlot(time, name);
-    return 'appointment confirmed';
+  if (time && name && email) { // Added email to the condition
+    await bookTimeSlot(time, name, email); // Pass email to bookTimeSlot
+    return `Appointment confirmed for ${name} at ${time} IST. A calendar invite has been sent to ${email}.`;
   } else {
-    return 'didn\'t caught the details, please ask again for time and name';
+    return 'I didn’t catch all the details. Please provide your time, name, and email again.';
   }
 }
 
