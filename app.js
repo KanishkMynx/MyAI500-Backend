@@ -225,7 +225,8 @@ app.ws('/connection', (ws) => {
       if (msg.event === 'start') {
         streamSid = msg.start.streamSid;
         callSid = msg.start.callSid;
-        callStartTime = new Date(); // Record the start time
+        const callStartTimeUTC = new Date();
+        callStartTime=callStartTimeUTC.toISOString() // Record the start time
         
         streamService.setStreamSid(streamSid);
         gptService.setCallSid(callSid);
@@ -242,11 +243,12 @@ app.ws('/connection', (ws) => {
         marks = marks.filter(m => m !== msg.mark.name);
       } else if (msg.event === 'stop') {
         console.log(`Twilio -> Media stream ${streamSid} ended.`.underline.red);
-        callEndTime = new Date(); // Record the end time
+        const callEndTimeUTC = new Date();
+        callEndTime=callEndTimeUTC.toISOString() // Record the end time
 
         // Format the call duration (e.g., "1:00:00 pm to 1:02:00 pm")
         const formatTime = (date) => {
-          return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
+          return new Date(date).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true });
         };
         const callDuration = `${formatTime(callStartTime)} to ${formatTime(callEndTime)}`;
 
