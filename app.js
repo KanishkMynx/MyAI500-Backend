@@ -220,7 +220,7 @@ app.ws('/connection', (ws) => {
     let marks = [];
     let interactionCount = 0;
   
-    ws.on('message', function message(data) {
+    ws.on('message', async function message(data) { // Mark the function as async
       const msg = JSON.parse(data);
       if (msg.event === 'start') {
         streamSid = msg.start.streamSid;
@@ -230,7 +230,7 @@ app.ws('/connection', (ws) => {
         streamService.setStreamSid(streamSid);
         gptService.setCallSid(callSid);
 
-        recordingService(ttsService, callSid).then(() => {
+        await recordingService(ttsService, callSid).then(() => { // Use await here as well
           console.log(`Twilio -> Starting Media Stream for ${streamSid}`.underline.red);
           ttsService.generate({partialResponseIndex: null, partialResponse: 'Hello! I understand you\'re looking for an Appointment, is that correct?'}, 0);
         });
@@ -261,7 +261,7 @@ app.ws('/connection', (ws) => {
         });
 
         try {
-          await callRecord.save();
+          await callRecord.save(); // This await is now valid
           console.log(`Entire call transcript saved to MongoDB for call ${callSid}`.magenta);
         } catch (error) {
           console.error('Error saving call transcript to MongoDB:', error);
