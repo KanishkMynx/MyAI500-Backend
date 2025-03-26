@@ -105,11 +105,11 @@ class TranscriptionService extends EventEmitter {
     this.dgConnection = deepgram.listen.live({
       encoding: 'mulaw',
       sample_rate: 8000,
-      model: 'nova-2-phonecall', // Optimized for phone calls
+      model: 'nova-2', // Optimized for phone calls
       punctuate: true,
       interim_results: true,
-      endpointing: 300, // Slightly longer pause detection
-      utterance_end_ms: 1500, // More time for utterance end
+      endpointing: 150, // Slightly longer pause detection
+      utterance_end_ms: 1000, // More time for utterance end
       smart_format: true, // Enable smart formatting for emails, numbers, etc.
       keywords: ['gmail.com', '@', 'dot', 'email', 'plus', 'minus'], // Boost recognition of key terms
     });
