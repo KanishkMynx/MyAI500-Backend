@@ -2,13 +2,35 @@ const { google } = require('googleapis');
 const moment = require('moment');
 
 // Load the service account key JSON file
-const KEYFILEPATH = './keys.json';
+// const KEYFILEPATH = './keys.json';
+// const SCOPES = ['https://www.googleapis.com/auth/calendar'];
+
+// // Create a JWT client
+// const auth = new google.auth.GoogleAuth({
+//   keyFile: KEYFILEPATH,
+//   scopes: SCOPES,
+// });
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
-// Create a JWT client
-const auth = new google.auth.GoogleAuth({
-  keyFile: KEYFILEPATH,
-  scopes: SCOPES,
+const credentials = {
+  type: process.env.GOOGLE_TYPE,
+  project_id: process.env.GOOGLE_PROJECT_ID,
+  private_key_id: process.env.GOOGLE_PRIVATE_KEY_ID,
+  private_key: process.env.GOOGLE_PRIVATE_KEY,
+  client_email: process.env.GOOGLE_CLIENT_EMAIL,
+  client_id: process.env.GOOGLE_CLIENT_ID,
+  auth_uri: process.env.GOOGLE_AUTH_URI,
+  token_uri: process.env.GOOGLE_TOKEN_URI,
+  auth_provider_x509_cert_url: process.env.GOOGLE_AUTH_PROVIDER_X509_CERT_URL,
+  client_x509_cert_url: process.env.GOOGLE_CLIENT_X509_CERT_URL,
+  universe_domain: process.env.GOOGLE_UNIVERSE_DOMAIN
+};
+
+// Create a JWT client using the credentials
+const auth = new google.auth.JWT({
+  email: credentials.client_email,
+  key: credentials.private_key,
+  scopes: SCOPES
 });
 
 // Leaving calendar ID here it should give you a public view of calendar
