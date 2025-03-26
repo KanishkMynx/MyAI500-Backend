@@ -331,7 +331,9 @@
 
 // app.listen(PORT);
 // console.log(`Server running on port ${PORT}`);
-//................................................
+
+
+
 
 
 require('dotenv').config();
@@ -354,6 +356,31 @@ ExpressWs(app);
 
 const PORT = process.env.PORT || 8000;
 
+// Helper functions for IST time formatting
+const formatISTTime = (date) => {
+  return new Date(date).toLocaleTimeString('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true
+  });
+};
+
+const formatISTDate = (date) => {
+  const options = { 
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric'
+  };
+  return new Date(date).toLocaleDateString('en-IN', options);
+};
+
+const getFullISTDateTime = (date) => {
+  return `${formatISTDate(date)} ${formatISTTime(date)} IST`;
+};
+
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
@@ -364,19 +391,19 @@ mongoose.connect(process.env.MONGODB_URI, {
   console.error('MongoDB connection error:', err);
 });
 
-// Updated Call Schema with better timing fields
+// Call Schema
 const callSchema = new mongoose.Schema({
-  callStartTime: { type: Date, required: true },
+  callStartTime: { type: Date },
   callEndTime: { type: Date },
-  callDurationSeconds: { type: Number }, // Actual duration in seconds
-  formattedDuration: { type: String },   // Human-readable format
-  timeRange: { type: String },           // "1:00:00 pm to 1:02:00 pm"
+  callDuration: { type: String },
+  istStartTime: { type: String }, // Added IST formatted time
+  istEndTime: { type: String },   // Added IST formatted time
   username: { type: String, default: 'anonymous' },
   email: { type: String, default: '' },
   transcript: [{
     user: { type: String, default: '' },
     gpt: { type: String, default: '' },
-    timestamp: { type: Date } // Track when each interaction happened
+    timestamp: { type: String } // Added timestamp for each interaction
   }]
 });
 
@@ -391,7 +418,6 @@ app.post('/incoming', (req, res) => {
     res.end(response.toString());
   } catch (err) {
     console.log(err);
-    res.status(500).end();
   }
 });
 
@@ -410,36 +436,10 @@ app.ws('/connection', (ws) => {
     const streamService = new StreamService(ws);
     const transcriptionService = new TranscriptionService();
     const ttsService = new TextToSpeechService({});
-
+  
     let marks = [];
     let interactionCount = 0;
-
-    // Helper function to format time consistently
-    const formatTime = (date) => {
-      if (!date) return 'N/A';
-      return date.toLocaleTimeString('en-US', { 
-        hour: 'numeric', 
-        minute: '2-digit', 
-        second: '2-digit', 
-        hour12: true,
-        timeZone: 'UTC' // Specify timezone to avoid inconsistencies
-      });
-    };
-
-    // Helper to calculate duration
-    const calculateDuration = (start, end) => {
-      if (!start || !end) return { seconds: 0, formatted: 'N/A' };
-      
-      const seconds = Math.round((end - start) / 1000);
-      const minutes = Math.floor(seconds / 60);
-      const remainingSeconds = seconds % 60;
-      
-      return {
-        seconds,
-        formatted: `${minutes}m ${remainingSeconds}s`
-      };
-    };
-
+  
     ws.on('message', async function message(data) {
       const msg = JSON.parse(data);
       if (msg.event === 'start') {
@@ -447,40 +447,31 @@ app.ws('/connection', (ws) => {
         callSid = msg.start.callSid;
         callStartTime = new Date();
         
-        // Ensure we have a clean start
-        transcript = [];
-        interactionCount = 0;
-        marks = [];
-
         streamService.setStreamSid(streamSid);
         gptService.setCallSid(callSid);
 
         recordingService(ttsService, callSid).then(() => {
-          console.log(`Twilio -> Starting Media Stream for ${streamSid}`.underline.red);
-          ttsService.generate({
-            partialResponseIndex: null, 
-            partialResponse: 'Hello! I understand you\'re looking for an Appointment, is that correct?'
-          }, 0);
+          console.log(`Twilio -> Starting Media Stream for ${streamSid} at ${getFullISTDateTime(callStartTime)}`.underline.red);
+          ttsService.generate({partialResponseIndex: null, partialResponse: 'Hello! I understand you\'re looking for an Appointment, is that correct?'}, 0);
         });
       } else if (msg.event === 'media') {
         transcriptionService.send(msg.media.payload);
       } else if (msg.event === 'mark') {
         const label = msg.mark.name;
-        console.log(`Twilio -> Audio completed mark (${msg.sequenceNumber}): ${label}`.red);
+        console.log(`Twilio -> Audio completed mark (${msg.sequenceNumber}): ${label} at ${formatISTTime(new Date())}`.red);
         marks = marks.filter(m => m !== msg.mark.name);
       } else if (msg.event === 'stop') {
-        console.log(`Twilio -> Media stream ${streamSid} ended.`.underline.red);
         callEndTime = new Date();
-        
-        const duration = calculateDuration(callStartTime, callEndTime);
-        const timeRange = `${formatTime(callStartTime)} to ${formatTime(callEndTime)}`;
+        console.log(`Twilio -> Media stream ${streamSid} ended at ${getFullISTDateTime(callEndTime)}`.underline.red);
+
+        const callDuration = `${getFullISTDateTime(callStartTime)} to ${getFullISTDateTime(callEndTime)}`;
 
         const callRecord = new Call({
           callStartTime,
           callEndTime,
-          callDurationSeconds: duration.seconds,
-          formattedDuration: duration.formatted,
-          timeRange,
+          callDuration,
+          istStartTime: getFullISTDateTime(callStartTime),
+          istEndTime: getFullISTDateTime(callEndTime),
           username,
           email,
           transcript
@@ -488,16 +479,16 @@ app.ws('/connection', (ws) => {
 
         try {
           await callRecord.save();
-          console.log(`Call data saved to MongoDB for ${callSid}`.magenta);
+          console.log(`Call transcript saved to MongoDB at ${getFullISTDateTime(new Date())}`.magenta);
         } catch (error) {
-          console.error('Error saving call data:', error);
+          console.error('Error saving call transcript:', error);
         }
       }
     });
-
+  
     transcriptionService.on('utterance', async (text) => {
-      if (marks.length > 0 && text?.length > 5) {
-        console.log('Twilio -> Interruption, Clearing stream'.red);
+      if(marks.length > 0 && text?.length > 5) {
+        console.log(`Twilio -> Interruption at ${formatISTTime(new Date())}, Clearing stream`.red);
         ws.send(
           JSON.stringify({
             streamSid,
@@ -506,16 +497,16 @@ app.ws('/connection', (ws) => {
         );
       }
     });
-
+  
     transcriptionService.on('transcription', async (text) => {
-      if (!text) return;
-      console.log(`Interaction ${interactionCount} - STT -> GPT: ${text}`.yellow);
-
-      // Add timestamp to each interaction
+      if (!text) { return; }
+      const now = new Date();
+      console.log(`[${formatISTTime(now)}] Interaction ${interactionCount} - STT -> GPT: ${text}`.yellow);
+      
       transcript.push({ 
         user: text, 
-        gpt: '', 
-        timestamp: new Date() 
+        gpt: '',
+        timestamp: formatISTTime(now)
       });
 
       if (interactionCount === 2 && text.toLowerCase().includes('my name is')) {
@@ -528,40 +519,38 @@ app.ws('/connection', (ws) => {
       gptService.completion(text, interactionCount);
       interactionCount += 1;
     });
-
+    
     gptService.on('gptreply', async (gptReply, icount) => {
-      console.log(`Interaction ${icount}: GPT -> TTS: ${gptReply.partialResponse}`.green);
-
+      const now = new Date();
+      console.log(`[${formatISTTime(now)}] Interaction ${icount}: GPT -> TTS: ${gptReply.partialResponse}`.green);
+      
       if (transcript[icount]) {
         transcript[icount].gpt = gptReply.partialResponse;
+        transcript[icount].timestamp = transcript[icount].timestamp || formatISTTime(now);
       } else {
         transcript.push({ 
           user: '', 
           gpt: gptReply.partialResponse,
-          timestamp: new Date()
+          timestamp: formatISTTime(now)
         });
       }
 
       ttsService.generate(gptReply, icount);
     });
-
+  
     ttsService.on('speech', (responseIndex, audio, label, icount) => {
-      console.log(`Interaction ${icount}: TTS -> TWILIO: ${label}`.blue);
+      console.log(`[${formatISTTime(new Date())}] Interaction ${icount}: TTS -> TWILIO: ${label}`.blue);
       streamService.buffer(responseIndex, audio);
     });
-
+  
     streamService.on('audiosent', (markLabel) => {
       marks.push(markLabel);
     });
-
   } catch (err) {
-    console.error('WebSocket connection error:', err);
-    if (ws.readyState === ws.OPEN) {
-      ws.close();
-    }
+    console.log(`[${formatISTTime(new Date())}] Error:`, err);
   }
 });
 
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(`Server started on port ${PORT} at ${getFullISTDateTime(new Date())}`);
 });
