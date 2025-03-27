@@ -509,23 +509,13 @@ app.ws('/connection', (ws) => {
         timestamp: formatISTTime(now)
       });
 
-      // if (interactionCount === 2 && text.toLowerCase().includes('my name is')) {
-      //   username = text.toLowerCase().replace('my name is', '').trim();
-      // }
-      // if (interactionCount === 3 && text.toLowerCase().includes('gmail')) {
-      //   email = text.toLowerCase().replace(/\s/g, '') + '@gmail.com';
-      // }
       if (interactionCount === 2 && text.toLowerCase().includes('my name is')) {
+        username = text.toLowerCase().replace('my name is', '').trim();
+      }
+      if (interactionCount === 3 && text.toLowerCase().includes('gmail')) {
+        email = text.toLowerCase().replace(/\s/g, '') + '@gmail.com';
+      }
 
-        username = text.toLowerCase().replace('my name is', '').split(',')[0].trim();
-      
-      }
-       
-      if (interactionCount === 3 && /\b[A-Za-z0-9._%+-]+@gmail\.com\b/.test(text.toLowerCase())) {
-      
-        email = text.toLowerCase().match(/\b[A-Za-z0-9._%+-]+@gmail\.com\b/)[0];
-      
-      }
       
        
       gptService.completion(text, interactionCount);
