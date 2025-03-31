@@ -26,15 +26,15 @@ async function bookAppointment(functionArgs) {
   
   if (time && name && email && emailRegex.test(email)) {
     try {
-      // Get available slots to match the requested time
       const slots = await getAvailableTimeSlots();
-      const selectedSlot = slots.find(slot => slot.startTime === time);
+      console.log('Slots in bookAppointment:', slots); // Debug log
+      const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
       
       if (!selectedSlot) {
         return `Sorry, ${time} IST isn’t available. • Please pick a time from the available slots!`;
       }
 
-      const event = await bookTimeSlot(selectedSlot.startTS, name, email); // Use startTS instead of time string
+      const event = await bookTimeSlot(selectedSlot.startTS, name, email);
       const meetingLink = event.htmlLink || 'link unavailable';
       console.log(`Booking successful: ${meetingLink}`);
       return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;

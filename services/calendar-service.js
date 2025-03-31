@@ -246,7 +246,7 @@
 // module.exports = { getAvailableTimeSlots, bookTimeSlot };
 
 const { google } = require('googleapis');
-const moment = require('moment');
+const moment = require('moment-timezone'); // Use moment-timezone for better timezone handling
 
 const SCOPES = ['https://www.googleapis.com/auth/calendar'];
 
@@ -274,15 +274,17 @@ const calendarId = '5e8e29a689c0ec7f93a3ed065f7ad6f21e25696863e8977f10fd6dc6cc8e
 const calendar = google.calendar({ version: 'v3', auth });
 
 const getAvailableTimeSlots = async () => {
-  const startDateTime = new Date();
-  const endDateTime = new Date();
-  endDateTime.setDate(startDateTime.getDate() + 1);
+  // Use moment-timezone to set the date in IST
+  const startDateTime = moment.tz('Asia/Kolkata').startOf('day'); // Today at 00:00 IST
+  startDateTime.add(1, 'day'); // Move to tomorrow
+  const endDateTime = moment.tz(startDateTime, 'Asia/Kolkata').endOf('day'); // Tomorrow at 23:59 IST
 
   try {
     const response = await calendar.freebusy.query({
       requestBody: {
         timeMin: startDateTime.toISOString(),
         timeMax: endDateTime.toISOString(),
+        timeZone: 'Asia/Kolkata', // Explicitly set the timezone for the query
         items: [{ id: calendarId }],
       },
     });
@@ -290,18 +292,16 @@ const getAvailableTimeSlots = async () => {
     const busyTimes = response.data.calendars[calendarId].busy;
     const availableSlots = [];
 
-    let currentTime = new Date(startDateTime);
-    currentTime.setHours(currentTime.getHours() > 9 ? currentTime.getHours() + 1 : 9, 0, 0, 0);
-    const endOfDayTime = new Date(startDateTime);
-    endOfDayTime.setHours(21, 0, 0, 0);
+    // Set the time range for slots (9:00 AM to 9:00 PM IST)
+    let currentTime = moment.tz(startDateTime, 'Asia/Kolkata').set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+    const endOfDayTime = moment.tz(startDateTime, 'Asia/Kolkata').set({ hour: 21, minute: 0, second: 0, millisecond: 0 });
 
     while (currentTime < endOfDayTime) {
-      const nextTime = new Date(currentTime);
-      nextTime.setMinutes(currentTime.getMinutes() + 30);
+      const nextTime = moment(currentTime).add(30, 'minutes');
 
       const isBusy = busyTimes.some((busyTime) => {
-        const busyStart = new Date(busyTime.start);
-        const busyEnd = new Date(busyTime.end);
+        const busyStart = moment(busyTime.start);
+        const busyEnd = moment(busyTime.end);
         return (
           (currentTime >= busyStart && currentTime < busyEnd) ||
           (nextTime > busyStart && nextTime <= busyEnd)
@@ -310,16 +310,17 @@ const getAvailableTimeSlots = async () => {
 
       if (!isBusy) {
         availableSlots.push({
-          startTS: moment(currentTime).toISOString(),
-          startTime: moment(currentTime).format('hh:mm A'),
-          endTS: moment(nextTime).toISOString(),
-          endTime: moment(nextTime).format('hh:mm A'),
+          startTS: currentTime.toISOString(),
+          startTime: currentTime.format('hh:mm A'),
+          endTS: nextTime.toISOString(),
+          endTime: nextTime.format('hh:mm A'),
         });
       }
 
       currentTime = nextTime;
     }
 
+    console.log('Available slots:', availableSlots); // Debug log
     return availableSlots;
   } catch (err) {
     console.error('Error fetching available time slots:', err);
@@ -327,8 +328,8 @@ const getAvailableTimeSlots = async () => {
   }
 };
 
-async function bookTimeSlot(startTS, name, clientEmail) { // Changed 'time' to 'startTS'
-  const appointmentStartTime = new Date(startTS); // Use the ISO timestamp directly
+async function bookTimeSlot(startTS, name, clientEmail) {
+  const appointmentStartTime = new Date(startTS);
   const appointmentEndTime = moment(appointmentStartTime).add(30, 'minutes').toDate();
 
   const event = {
