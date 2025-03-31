@@ -323,18 +323,12 @@ const getAvailableTimeSlots = async () => {
     return availableSlots;
   } catch (err) {
     console.error('Error fetching available time slots:', err);
-    return []; // Return empty array to keep the flow going
+    return [];
   }
 };
 
-async function bookTimeSlot(time, name, clientEmail) {
-  let [hour, _minute] = time.split(':');
-  let [minute, timeOfDay] = _minute.split(' ');
-  
-  hour = timeOfDay.includes('AM') ? hour : parseInt(hour) + 12;
-  minute = minute.split(' ')[0];
-
-  const appointmentStartTime = moment().set({ hour, minute }).toDate();
+async function bookTimeSlot(startTS, name, clientEmail) { // Changed 'time' to 'startTS'
+  const appointmentStartTime = new Date(startTS); // Use the ISO timestamp directly
   const appointmentEndTime = moment(appointmentStartTime).add(30, 'minutes').toDate();
 
   const event = {
@@ -370,7 +364,7 @@ async function bookTimeSlot(time, name, clientEmail) {
       sendNotifications: !!clientEmail
     });
     console.log('Event created: %s', response.data.htmlLink);
-    return response.data; // Return event data with htmlLink
+    return response.data;
   } catch (err) {
     console.error('Error creating event:', err);
     if (err.code === 403 || err.message.includes('delegation')) {
@@ -383,9 +377,9 @@ async function bookTimeSlot(time, name, clientEmail) {
         sendNotifications: false
       });
       console.log('Event created without attendees: %s', retryResponse.data.htmlLink);
-      return retryResponse.data; // Return event data even without attendees
+      return retryResponse.data;
     }
-    throw err; // Re-throw other errors
+    throw err;
   }
 }
 

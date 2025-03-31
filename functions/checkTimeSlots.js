@@ -21,7 +21,7 @@
 const { getAvailableTimeSlots } = require('../services/calendar-service');
 
 async function checkTimeSlots(functionArgs) {
-  const { timeOfDay } = functionArgs; // Use object destructuring
+  const { timeOfDay } = functionArgs;
   console.log('GPT -> called checkTimeSlots function');
 
   const slots = await getAvailableTimeSlots();
@@ -40,7 +40,9 @@ async function checkTimeSlots(functionArgs) {
     return `No ${timeOfDay} slots available today. • Check a different time of day?`;
   }
 
-  return `Available ${timeOfDay || ''} slots: ${filteredSlots.map(slot => slot.startTime + ' IST').join(', ')}. • Which one works for you?`;
+  // Return the full slot details as a string for the assistant to present
+  const slotList = filteredSlots.map(slot => `${slot.startTime} IST`).join(', ');
+  return `Available ${timeOfDay || ''} slots: ${slotList}. • Which one works for you? (Please say the exact time, like "10:00 AM")`;
 }
 
 module.exports = checkTimeSlots;

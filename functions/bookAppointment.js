@@ -16,7 +16,7 @@
 // }
 
 // module.exports = bookAppointment;
-const { bookTimeSlot } = require('../services/calendar-service');
+const { bookTimeSlot, getAvailableTimeSlots } = require('../services/calendar-service');
 
 async function bookAppointment(functionArgs) {
   const { time, name, email } = functionArgs;
@@ -26,8 +26,16 @@ async function bookAppointment(functionArgs) {
   
   if (time && name && email && emailRegex.test(email)) {
     try {
-      const event = await bookTimeSlot(time, name, email); // Await the booking
-      const meetingLink = event.htmlLink || 'link unavailable'; // Fallback if htmlLink isn’t returned
+      // Get available slots to match the requested time
+      const slots = await getAvailableTimeSlots();
+      const selectedSlot = slots.find(slot => slot.startTime === time);
+      
+      if (!selectedSlot) {
+        return `Sorry, ${time} IST isn’t available. • Please pick a time from the available slots!`;
+      }
+
+      const event = await bookTimeSlot(selectedSlot.startTS, name, email); // Use startTS instead of time string
+      const meetingLink = event.htmlLink || 'link unavailable';
       console.log(`Booking successful: ${meetingLink}`);
       return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;
     } catch (err) {
