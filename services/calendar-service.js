@@ -99,15 +99,70 @@ const getAvailableTimeSlots = async () => {
   }
 };
 
-function bookTimeSlot(time, name, email) { // Added 'email' parameter
+// function bookTimeSlot(time, name, email) { // Added 'email' parameter
+//   let [hour, _minute] = time.split(':');
+//   let [minute, timeOfDay] = _minute.split(' ');
+//   const calendar = google.calendar({ version: 'v3', auth });
+  
+//   hour = timeOfDay.includes('AM') ? hour : parseInt(hour) + 12;
+//   minute = minute.split(' ')[0];
+
+//   console.log(hour, minute);
+
+//   const appointmentStartTime = moment()
+//     .set({ hour, minute })
+//     .toDate();
+//   const appointmentEndTime = moment(appointmentStartTime)
+//     .add(30, 'minutes')
+//     .toDate();
+
+//   const event = {
+//     summary: `Appointment with Client ${name}`,
+//     location: '123 Main St, Anytown, USA',
+//     description: 'Discuss project details and next steps.',
+//     start: {
+//       dateTime: appointmentStartTime.toISOString(),
+//       timeZone: 'Asia/Kolkata',
+//     },
+//     end: {
+//       dateTime: appointmentEndTime.toISOString(),
+//       timeZone: 'Asia/Kolkata',
+//     },
+//     attendees: email ? [{ email }] : [], // Add user as attendee if email is provided
+//     reminders: {
+//       useDefault: false,
+//       overrides: [
+//         { method: 'email', minutes: 24 * 60 }, // 1 day before
+//         { method: 'popup', minutes: 10 }, // 10 minutes before
+//       ],
+//     },
+//     sendUpdates: 'all', // Ensures the user gets an email notification
+//   };
+
+//   calendar.events.insert(
+//     {
+//       calendarId: calendarId,
+//       resource: event,
+//     },
+//     (err, event) => {
+//       if (err) {
+//         console.error('There was an error contacting the Calendar service:', err);
+//         return;
+//       }
+//       console.log('Event created: %s', event.data.htmlLink);
+//     }
+//   );
+
+//   return event;
+// }
+
+function bookTimeSlot(time, name, clientEmail) {
   let [hour, _minute] = time.split(':');
   let [minute, timeOfDay] = _minute.split(' ');
   const calendar = google.calendar({ version: 'v3', auth });
   
   hour = timeOfDay.includes('AM') ? hour : parseInt(hour) + 12;
   minute = minute.split(' ')[0];
-
-  console.log(hour, minute);
 
   const appointmentStartTime = moment()
     .set({ hour, minute })
@@ -128,32 +183,61 @@ function bookTimeSlot(time, name, email) { // Added 'email' parameter
       dateTime: appointmentEndTime.toISOString(),
       timeZone: 'Asia/Kolkata',
     },
-    attendees: email ? [{ email }] : [], // Add user as attendee if email is provided
     reminders: {
       useDefault: false,
       overrides: [
-        { method: 'email', minutes: 24 * 60 }, // 1 day before
-        { method: 'popup', minutes: 10 }, // 10 minutes before
+        { method: 'email', minutes: 24 * 60 },
+        { method: 'popup', minutes: 10 },
       ],
-    },
-    sendUpdates: 'all', // Ensures the user gets an email notification
+    }
   };
+
+  // Only add attendees if clientEmail is provided (optional)
+  if (clientEmail) {
+    event.attendees = [{ email: clientEmail }];
+    event.sendUpdates = 'all'; // Send updates if attendees are included
+  }
+
+  let meetingLink = null;
 
   calendar.events.insert(
     {
       calendarId: calendarId,
       resource: event,
+      sendNotifications: !!clientEmail // Only send notifications if clientEmail exists
     },
     (err, event) => {
       if (err) {
-        console.error('There was an error contacting the Calendar service:', err);
+        console.error('Error creating event:', err);
+        // If the error is specifically about attendees, try again without them
+        if (err.code === 403 || err.message.includes('delegation')) {
+          console.log('Retrying without attendees due to permission error...');
+          delete event.attendees; // Remove attendees
+          delete event.sendUpdates; // Remove sendUpdates
+          calendar.events.insert(
+            {
+              calendarId: calendarId,
+              resource: event,
+              sendNotifications: false // No notifications without attendees
+            },
+            (retryErr, retryEvent) => {
+              if (retryErr) {
+                console.error('Retry failed:', retryErr);
+                return;
+              }
+              meetingLink = retryEvent.data.htmlLink;
+              console.log('Event created without attendees: %s', meetingLink);
+            }
+          );
+        }
         return;
       }
-      console.log('Event created: %s', event.data.htmlLink);
+      meetingLink = event.data.htmlLink;
+      console.log('Event created: %s', meetingLink);
     }
   );
 
-  return event;
+  return event; // Note: meetingLink might not be set yet due to async nature
 }
 
 // Update the export to reflect the new function signature
