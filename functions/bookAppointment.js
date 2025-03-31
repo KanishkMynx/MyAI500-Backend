@@ -20,15 +20,22 @@ const { bookTimeSlot } = require('../services/calendar-service');
 
 async function bookAppointment(functionArgs) {
   const { time, name, email } = functionArgs;
-  console.log('GPT -> called bookAppointment function');
+  console.log('GPT -> called bookAppointment function', { time, name, email });
   
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   
   if (time && name && email && emailRegex.test(email)) {
-    const event = await bookTimeSlot(time, name, email); // Await the result
-    return `Appointment confirmed for ${name} at ${time} IST. • I’ve booked it on my calendar. • Check your email (${email}) for details if you use Google Calendar!`;
+    try {
+      const event = await bookTimeSlot(time, name, email); // Await the booking
+      const meetingLink = event.htmlLink || 'link unavailable'; // Fallback if htmlLink isn’t returned
+      console.log(`Booking successful: ${meetingLink}`);
+      return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;
+    } catch (err) {
+      console.error('Booking error:', err);
+      return 'Oops, something went wrong booking your appointment. • Can we try again?';
+    }
   } else {
-    return 'I didn’t catch all the details correctly. • Please provide your time, name, and a valid email again.';
+    return 'I didn’t catch all the details. • Please provide your time, name, and a valid email again.';
   }
 }
 

@@ -270,7 +270,7 @@ const auth = new google.auth.JWT({
   scopes: SCOPES
 });
 
-const calendarId = '5e8e29a689c0ec7f93a3ed065f7ad6f21e25696863e8977fовідненіf10fd6dc6cc8ef4cf@group.calendar.google.com';
+const calendarId = '5e8e29a689c0ec7f93a3ed065f7ad6f21e25696863e8977f10fd6dc6cc8ef4cf@group.calendar.google.com';
 const calendar = google.calendar({ version: 'v3', auth });
 
 const getAvailableTimeSlots = async () => {
@@ -323,7 +323,7 @@ const getAvailableTimeSlots = async () => {
     return availableSlots;
   } catch (err) {
     console.error('Error fetching available time slots:', err);
-    throw err; // Propagate error
+    return []; // Return empty array to keep the flow going
   }
 };
 
@@ -370,7 +370,7 @@ async function bookTimeSlot(time, name, clientEmail) {
       sendNotifications: !!clientEmail
     });
     console.log('Event created: %s', response.data.htmlLink);
-    return response.data; // Return event data including htmlLink
+    return response.data; // Return event data with htmlLink
   } catch (err) {
     console.error('Error creating event:', err);
     if (err.code === 403 || err.message.includes('delegation')) {
@@ -383,7 +383,7 @@ async function bookTimeSlot(time, name, clientEmail) {
         sendNotifications: false
       });
       console.log('Event created without attendees: %s', retryResponse.data.htmlLink);
-      return retryResponse.data;
+      return retryResponse.data; // Return event data even without attendees
     }
     throw err; // Re-throw other errors
   }
