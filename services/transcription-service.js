@@ -16,7 +16,7 @@ class TranscriptionService extends EventEmitter {
       interim_results: true,
       endpointing: 200,
       utterance_end_ms: 1000,
-      language: multi
+      
     });
 
     this.finalResult = '';
