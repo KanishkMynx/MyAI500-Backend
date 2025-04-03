@@ -487,14 +487,14 @@ async function bookTimeSlot(startTS, name, clientEmail) {
       resource: event,
       sendNotifications: !!clientEmail,
     });
-
     console.log('Event created:', response.data.htmlLink);
     return response.data;
   } catch (err) {
     console.error('Error creating event:', err);
-    throw err;
+    if (err.code === 403) {
+      throw new Error('Permission denied. • I can’t book this right now—please try again later or contact support!');
+    }
+    throw new Error('Booking failed. • Something went wrong—let’s try again!');
   }
 }
-
-
 module.exports = { getAvailableTimeSlots, bookTimeSlot };

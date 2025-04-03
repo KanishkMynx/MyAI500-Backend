@@ -51,26 +51,23 @@ async function bookAppointment({ time, name, email, date = 'today' }) {
 
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   if (!time || !name || !email || !emailRegex.test(email)) {
-    return 'Please provide a valid time, name, and email!';
+    return 'I need a valid time, name, and email to book. • What’s missing?';
   }
 
   try {
     const slots = await getAvailableTimeSlots(date);
-    console.log(`Available slots on ${date}:`, slots);
-
     const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
 
     if (!selectedSlot) {
-      return `Sorry, ${time} IST isn’t available on ${date}. Please pick another time!`;
+      return `Sorry, ${time} IST isn’t available on ${date}. • Pick another time!`;
     }
 
     const event = await bookTimeSlot(selectedSlot.startTS, name, email);
-    return `Appointment confirmed for ${name} at ${time} IST on ${date}. Check ${email} for details.`;
+    return `All set! ${name}, your appointment is booked for ${time} IST on ${date}. • Check ${email} for the confirmation!`;
   } catch (err) {
-    console.error('Booking error:', err);
-    return 'Something went wrong. Please try again!';
+    console.error('Booking error:', err.message);
+    return err.message; // Propagate the error message back to the assistant
   }
 }
-
 
 module.exports = bookAppointment;
