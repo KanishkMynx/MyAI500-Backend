@@ -45,25 +45,6 @@ async function checkTimeSlots(functionArgs) {
   return `Available ${timeOfDay || ''} slots: ${slotList}. • Which one works for you? (Please say the exact time, like "10:00 AM")`;
 }
 
-// async function checkTimeSlots({ timeOfDay, date = 'today' }) {
-//   console.log('GPT -> called checkTimeSlots function', { timeOfDay, date });
 
-//   const slots = await getAvailableTimeSlots(date);
-//   if (!slots.length) return `No available slots on ${date}. • Try another day!`;
-
-//   let filteredSlots = slots;
-//   if (timeOfDay?.toLowerCase() === 'morning') {
-//     filteredSlots = slots.filter(slot => parseInt(slot.startTime.split(':')[0]) < 12);
-//   } else if (timeOfDay?.toLowerCase() === 'evening') {
-//     filteredSlots = slots.filter(slot => parseInt(slot.startTime.split(':')[0]) >= 16);
-//   }
-
-//   if (!filteredSlots.length) {
-//     return `No ${timeOfDay} slots on ${date}. • Try a different time!`;
-//   }
-
-//   const slotList = filteredSlots.map(slot => `${slot.startTime} IST`).join(', ');
-//   return `Here are the available ${timeOfDay || ''} slots on ${date}: ${slotList}. • Which time works for you?`;
-// }
 
 module.exports = checkTimeSlots;

@@ -46,28 +46,6 @@ async function bookAppointment(functionArgs) {
     return 'I didn’t catch all the details. • Please provide your time, name, and a valid email again.';
   }
 }
-// async function bookAppointment({ time, name, email, date = 'today' }) {
-//   console.log('GPT -> called bookAppointment function', { time, name, email, date });
 
-//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-//   if (!time || !name || !email || !emailRegex.test(email)) {
-//     return 'I need a valid time, name, and email to book. • What’s missing?';
-//   }
 
-//   try {
-//     const slots = await getAvailableTimeSlots(date);
-//     const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
-
-//     if (!selectedSlot) {
-//       return `Sorry, ${time} IST isn’t available on ${date}. • Pick another time!`;
-//     }
-
-//     const event = await bookTimeSlot(selectedSlot.startTS, name, email);
-//     return `All set! ${name}, your appointment is booked for ${time} IST on ${date}. • Check ${email} for the confirmation!`;
-//   } catch (err) {
-//     console.error('Booking error:', err.message);
-//     return err.message; // Propagate the error message back to the assistant
-//   }
-// }
-
-// module.exports = bookAppointment;
+module.exports = bookAppointment;
