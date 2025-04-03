@@ -18,56 +18,56 @@
 // module.exports = bookAppointment;
 const { bookTimeSlot, getAvailableTimeSlots } = require('../services/calendar-service');
 
-// async function bookAppointment(functionArgs) {
-//   const { time, name, email } = functionArgs;
-//   console.log('GPT -> called bookAppointment function', { time, name, email });
+async function bookAppointment(functionArgs) {
+  const { time, name, email } = functionArgs;
+  console.log('GPT -> called bookAppointment function', { time, name, email });
   
-//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
-//   if (time && name && email && emailRegex.test(email)) {
-//     try {
-//       const slots = await getAvailableTimeSlots();
-//       console.log('Slots in bookAppointment:', slots); // Debug log
-//       const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
-      
-//       if (!selectedSlot) {
-//         return `Sorry, ${time} IST isn’t available. • Please pick a time from the available slots!`;
-//       }
-
-//       const event = await bookTimeSlot(selectedSlot.startTS, name, email);
-//       const meetingLink = event.htmlLink || 'link unavailable';
-//       console.log(`Booking successful: ${meetingLink}`);
-//       return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;
-//     } catch (err) {
-//       console.error('Booking error:', err);
-//       return 'Oops, something went wrong booking your appointment. • Can we try again?';
-//     }
-//   } else {
-//     return 'I didn’t catch all the details. • Please provide your time, name, and a valid email again.';
-//   }
-// }
-async function bookAppointment({ time, name, email, date = 'today' }) {
-  console.log('GPT -> called bookAppointment function', { time, name, email, date });
-
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!time || !name || !email || !emailRegex.test(email)) {
-    return 'I need a valid time, name, and email to book. • What’s missing?';
-  }
+  
+  if (time && name && email && emailRegex.test(email)) {
+    try {
+      const slots = await getAvailableTimeSlots();
+      console.log('Slots in bookAppointment:', slots); // Debug log
+      const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
+      
+      if (!selectedSlot) {
+        return `Sorry, ${time} IST isn’t available. • Please pick a time from the available slots!`;
+      }
 
-  try {
-    const slots = await getAvailableTimeSlots(date);
-    const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
-
-    if (!selectedSlot) {
-      return `Sorry, ${time} IST isn’t available on ${date}. • Pick another time!`;
+      const event = await bookTimeSlot(selectedSlot.startTS, name, email);
+      const meetingLink = event.htmlLink || 'link unavailable';
+      console.log(`Booking successful: ${meetingLink}`);
+      return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;
+    } catch (err) {
+      console.error('Booking error:', err);
+      return 'Oops, something went wrong booking your appointment. • Can we try again?';
     }
-
-    const event = await bookTimeSlot(selectedSlot.startTS, name, email);
-    return `All set! ${name}, your appointment is booked for ${time} IST on ${date}. • Check ${email} for the confirmation!`;
-  } catch (err) {
-    console.error('Booking error:', err.message);
-    return err.message; // Propagate the error message back to the assistant
+  } else {
+    return 'I didn’t catch all the details. • Please provide your time, name, and a valid email again.';
   }
 }
+// async function bookAppointment({ time, name, email, date = 'today' }) {
+//   console.log('GPT -> called bookAppointment function', { time, name, email, date });
 
-module.exports = bookAppointment;
+//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+//   if (!time || !name || !email || !emailRegex.test(email)) {
+//     return 'I need a valid time, name, and email to book. • What’s missing?';
+//   }
+
+//   try {
+//     const slots = await getAvailableTimeSlots(date);
+//     const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
+
+//     if (!selectedSlot) {
+//       return `Sorry, ${time} IST isn’t available on ${date}. • Pick another time!`;
+//     }
+
+//     const event = await bookTimeSlot(selectedSlot.startTS, name, email);
+//     return `All set! ${name}, your appointment is booked for ${time} IST on ${date}. • Check ${email} for the confirmation!`;
+//   } catch (err) {
+//     console.error('Booking error:', err.message);
+//     return err.message; // Propagate the error message back to the assistant
+//   }
+// }
+
+// module.exports = bookAppointment;
