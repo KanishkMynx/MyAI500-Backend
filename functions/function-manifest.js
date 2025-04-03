@@ -138,7 +138,7 @@ const tools = [
     type: 'function',
     function: {
       name: 'checkTimeSlots',
-      say: 'All right, let me check the available time slots on calendar.',
+      say: 'Let me find some slots for you!',
       description: 'Checks for available time slots on Google Calendar.',
       parameters: {
         type: 'object',
