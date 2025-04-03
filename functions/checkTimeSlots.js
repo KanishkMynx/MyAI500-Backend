@@ -66,4 +66,4 @@ async function checkTimeSlots(functionArgs) {
 //   return `Here are the available ${timeOfDay || ''} slots on ${date}: ${slotList}. • Which time works for you?`;
 // }
 
-// module.exports = checkTimeSlots;
+module.exports = checkTimeSlots;
