@@ -1,21 +1,3 @@
-// const { bookTimeSlot } = require('../services/calendar-service');
-
-// async function bookAppointment(functionArgs) {
-//   const { time, name, email } = functionArgs;
-//   console.log('GPT -> called bookAppointment function');
-  
-//   // Simple email validation regex
-//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  
-//   if (time && name && email && emailRegex.test(email)) {
-//     await bookTimeSlot(time, name, email);
-//     return `Appointment confirmed for ${name} at ${time} IST. A calendar invite has been sent to ${email}.`;
-//   } else {
-//     return 'I didn’t catch all the details correctly. • Please provide your time, name, and a valid email again.';
-//   }
-// }
-
-// module.exports = bookAppointment;
 const { bookTimeSlot, getAvailableTimeSlots } = require('../services/calendar-service');
 
 async function bookAppointment(functionArgs) {
@@ -27,8 +9,10 @@ async function bookAppointment(functionArgs) {
   if (time && name && email && emailRegex.test(email)) {
     try {
       const slots = await getAvailableTimeSlots();
-      console.log('Slots in bookAppointment:', slots); // Debug log
-      const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
+      console.log('Slots in bookAppointment:', slots);
+      // Normalize time for matching (e.g., "5:00 PM" -> "05:00 PM")
+      const normalizedTime = time.replace(/^(\d):/, '0$1:').toLowerCase();
+      const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === normalizedTime);
       
       if (!selectedSlot) {
         return `Sorry, ${time} IST isn’t available. • Please pick a time from the available slots!`;
@@ -36,8 +20,10 @@ async function bookAppointment(functionArgs) {
 
       const event = await bookTimeSlot(selectedSlot.startTS, name, email);
       const meetingLink = event.htmlLink || 'link unavailable';
-      console.log(`Booking successful: ${meetingLink}`);
-      return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;
+      // Debug: Log the booked time in IST
+      const bookedDateTime = moment.tz(selectedSlot.startTS, 'Asia/Kolkata').format('YYYY-MM-DD hh:mm A');
+      console.log(`Booking successful: ${meetingLink}, DateTime: ${bookedDateTime} IST`);
+      return `Appointment confirmed for ${name} at ${time} IST on ${moment.tz(selectedSlot.startTS, 'Asia/Kolkata').format('YYYY-MM-DD')}. • It’s booked on my calendar! • Check ${email} for details.`;
     } catch (err) {
       console.error('Booking error:', err);
       return 'Oops, something went wrong booking your appointment. • Can we try again?';
@@ -47,5 +33,39 @@ async function bookAppointment(functionArgs) {
   }
 }
 
-
 module.exports = bookAppointment;
+
+//.....................below
+// const { bookTimeSlot, getAvailableTimeSlots } = require('../services/calendar-service');
+
+// async function bookAppointment(functionArgs) {
+//   const { time, name, email } = functionArgs;
+//   console.log('GPT -> called bookAppointment function', { time, name, email });
+  
+//   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  
+//   if (time && name && email && emailRegex.test(email)) {
+//     try {
+//       const slots = await getAvailableTimeSlots();
+//       console.log('Slots in bookAppointment:', slots); // Debug log
+//       const selectedSlot = slots.find(slot => slot.startTime.toLowerCase() === time.toLowerCase());
+      
+//       if (!selectedSlot) {
+//         return `Sorry, ${time} IST isn’t available. • Please pick a time from the available slots!`;
+//       }
+
+//       const event = await bookTimeSlot(selectedSlot.startTS, name, email);
+//       const meetingLink = event.htmlLink || 'link unavailable';
+//       console.log(`Booking successful: ${meetingLink}`);
+//       return `Appointment confirmed for ${name} at ${time} IST. • It’s booked on my calendar! • If you use Google Calendar, check ${email} for details.`;
+//     } catch (err) {
+//       console.error('Booking error:', err);
+//       return 'Oops, something went wrong booking your appointment. • Can we try again?';
+//     }
+//   } else {
+//     return 'I didn’t catch all the details. • Please provide your time, name, and a valid email again.';
+//   }
+// }
+
+
+// module.exports = bookAppointment;
