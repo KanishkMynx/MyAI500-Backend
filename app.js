@@ -486,9 +486,68 @@ app.ws('/connection', (ws) => {
       }
     });
   
-    transcriptionService.on('utterance', async (text) => {
+    // transcriptionService.on('utterance', async (text) => {
+    //   if(marks.length > 0 && text?.length > 5) {
+    //     console.log(`Twilio -> Interruption at ${formatISTTime(new Date())}, Clearing stream`.red);
+    //     ws.send(
+    //       JSON.stringify({
+    //         streamSid,
+    //         event: 'clear',
+    //       })
+    //     );
+    //   }
+    // });
+  
+    // transcriptionService.on('transcription', async (text) => {
+    //   if (!text) { return; }
+    //   const now = new Date();
+    //   console.log(`[${formatISTTime(now)}] Interaction ${interactionCount} - STT -> GPT: ${text}`.yellow);
+      
+    //   transcript.push({ 
+    //     user: text, 
+    //     gpt: '',
+    //     timestamp: formatISTTime(now)
+    //   });
+
+    //   if (interactionCount === 2 && text.toLowerCase().includes('my name is')) {
+    //     username = text.toLowerCase().replace('my name is', '').trim();
+    //   }
+    //   if (interactionCount === 3 && text.toLowerCase().includes('gmail')) {
+    //     email = text.toLowerCase().replace(/\s/g, '') + '@gmail.com';
+    //   }
+
+      
+       
+    //   gptService.completion(text, interactionCount);
+    //   interactionCount += 1;
+    // });
+
+    // Update the transcription event handler
+    transcriptionService.on('transcription', async (text, language) => {
+      if (!text) { return; }
+      const now = new Date();
+      console.log(`[${formatISTTime(now)}] Interaction ${interactionCount} - STT [${language}] -> GPT: ${text}`.yellow);
+      
+      transcript.push({ 
+        user: text, 
+        gpt: '',
+        language: language, // Store the detected language
+        timestamp: formatISTTime(now)
+      });
+
+      // You might want to adjust your GPT prompt based on the detected language
+      const systemPrompt = language === 'ar' 
+        ? "Respond in Arabic" 
+        : "Respond in English";
+      
+      await gptService.completion(text, interactionCount, 'user', 'user', systemPrompt);
+      interactionCount += 1;
+    });
+
+    // Update the utterance event handler
+    transcriptionService.on('utterance', async (text, language) => {
       if(marks.length > 0 && text?.length > 5) {
-        console.log(`Twilio -> Interruption at ${formatISTTime(new Date())}, Clearing stream`.red);
+        console.log(`Twilio -> Interruption [${language}], Clearing stream`.red);
         ws.send(
           JSON.stringify({
             streamSid,
@@ -497,30 +556,7 @@ app.ws('/connection', (ws) => {
         );
       }
     });
-  
-    transcriptionService.on('transcription', async (text) => {
-      if (!text) { return; }
-      const now = new Date();
-      console.log(`[${formatISTTime(now)}] Interaction ${interactionCount} - STT -> GPT: ${text}`.yellow);
-      
-      transcript.push({ 
-        user: text, 
-        gpt: '',
-        timestamp: formatISTTime(now)
-      });
 
-      if (interactionCount === 2 && text.toLowerCase().includes('my name is')) {
-        username = text.toLowerCase().replace('my name is', '').trim();
-      }
-      if (interactionCount === 3 && text.toLowerCase().includes('gmail')) {
-        email = text.toLowerCase().replace(/\s/g, '') + '@gmail.com';
-      }
-
-      
-       
-      gptService.completion(text, interactionCount);
-      interactionCount += 1;
-    });
     
     gptService.on('gptreply', async (gptReply, icount) => {
       const now = new Date();
