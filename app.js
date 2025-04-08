@@ -521,8 +521,6 @@ app.ws('/connection', (ws) => {
       gptService.completion(text, interactionCount);
       interactionCount += 1;
     });
-
-    Update the transcription event handler
     
     
     gptService.on('gptreply', async (gptReply, icount) => {
