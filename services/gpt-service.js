@@ -82,7 +82,7 @@ class GptService extends EventEmitter {
       },
       { 
         'role': 'assistant', 
-        'content': 'Hello! I understand you're looking for an appointment with Inzint, is that correct? • مرحباً! هل ترغب في حجز موعد مع Inzint؟' 
+        'content': "Hello! I understand you're looking for an appointment with Inzint, is that correct? • مرحباً! هل ترغب في حجز موعد مع Inzint؟"
       },
     ],
     this.partialResponseIndex = 0;
