@@ -61,7 +61,7 @@ require('colors');
 const EventEmitter = require('events');
 const fetch = require('node-fetch');
 
-class TTSService extends EventEmitter {
+class TextToSpeechService extends EventEmitter {
   constructor() {
     super();
     this.ELEVEN_LABS_API_KEY = process.env.ELEVEN_LABS_API_KEY;
@@ -142,4 +142,4 @@ class TTSService extends EventEmitter {
   }
 }
 
-module.exports = { TTSService };
+module.exports = { TextToSpeechService };
