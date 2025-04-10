@@ -27,10 +27,11 @@ class GptService extends EventEmitter {
   1. Greet and confirm they want to book an appointment.
  
   2. Ask: "Do you prefer morning or evening?"
-  4. Show available slots for their chosen timings, then ask: "Which time works for you? Please say the exact time, like '10:30 AM'."
-  5. Once they pick a time, ask for their name and email (if not already provided).
-  6. Confirm: "I’ll book [name] for [time] IST with [email]. Is that correct?"
-  7. Book the appointment and say: "All set! You’ll get a confirmation email soon."
+  3. Show available slots for their chosen timings, then ask: "Which time works for you? Please say the exact time, like '10:30 AM'."
+  4. Once they pick a time, ask for their name and email (if not already provided).
+  5. Confirm: "I’ll book [name] for [time] IST with [email]. Is that correct?"
+  6. Book the appointment and say: "All set! You’ll get a confirmation email soon."
+• After the booking is completed, **do not repeat confirmations or ask further questions unless the user explicitly requests a change.**
 • Keep the conversation natural—no robotic repetition. If they give details early, confirm them instead of asking again.
 • If they provide details early (e.g., name/email), confirm them instead of asking again.
 • Add a • every 5-10 words for text-to-speech pauses.
