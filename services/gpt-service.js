@@ -1,7 +1,7 @@
-require('colors');
-const EventEmitter = require('events');
-const OpenAI = require('openai');
-const tools = require('../functions/function-manifest');
+require("colors");
+const EventEmitter = require("events");
+const OpenAI = require("openai");
+const tools = require("../functions/function-manifest");
 
 // Import all functions included in function manifest
 // Note: the function name and file name must be the same
@@ -15,12 +15,11 @@ class GptService extends EventEmitter {
   constructor() {
     super();
     this.openai = new OpenAI();
-// In GptService constructor, update the system prompt slightly
-    this.userContext = [
+    // In GptService constructor, update the system prompt slightly
+    (this.userContext = [
       {
-
-          'role': 'system',
-          'content': `YOU ARE AN ADVANCED INBOUND MEETING BOOKING ASSISTANT FOR INZINT, DESIGNED TO HANDLE COMPLEX, FRAGMENTED, AND EDGE-CASE-HEAVY USER INTERACTIONS.
+        role: "system",
+        content: `YOU ARE AN ADVANCED INBOUND MEETING BOOKING ASSISTANT FOR INZINT, DESIGNED TO HANDLE COMPLEX, FRAGMENTED, AND EDGE-CASE-HEAVY USER INTERACTIONS.
 
 ### PERSONALITY & COMMUNICATION STYLE ###
 - Your tone is warm, cheery, and welcoming—like a friendly human assistant.
@@ -103,72 +102,78 @@ YOU MUST HANDLE OUT-OF-FLOW USER QUERIES INTELLIGENTLY:
 - TREAT ALL VALID QUESTIONS AS ACTIONABLE—NEVER ignore or delay valid queries, even if out-of-flow.
 
 YOU ARE NOT A ROBOT. YOU ARE A SUPER-INTELLIGENT, HUMAN-LIKE BOOKING AGENT WHO HANDLES CHAOS GRACEFULLY AND NEVER BREAKS CHARACTER.
-`
-
-
+`,
       },
-      { 'role': 'assistant', 'content': 'Hello! I understand you’re looking for an appointment with Inzint, is that correct?' },
-    ],
-    this.partialResponseIndex = 0;
+      {
+        role: "assistant",
+        content:
+          "Hello! I understand you’re looking for an appointment with Inzint, is that correct?",
+      },
+    ]),
+      (this.partialResponseIndex = 0);
   }
 
-
-  setCallSid (callSid) {
-    this.userContext.push({ 'role': 'system', 'content': `callSid: ${callSid}` });
+  setCallSid(callSid) {
+    this.userContext.push({ role: "system", content: `callSid: ${callSid}` });
   }
 
-  validateFunctionArgs (args) {
+  validateFunctionArgs(args) {
     try {
       return JSON.parse(args);
     } catch (error) {
-      console.log('Warning: Double function arguments returned by OpenAI:', args);
+      console.log(
+        "Warning: Double function arguments returned by OpenAI:",
+        args
+      );
       // Seeing an error where sometimes we have two sets of args
-      if (args.indexOf('{') != args.lastIndexOf('{')) {
-        return JSON.parse(args.substring(args.indexOf(''), args.indexOf('}') + 1));
+      if (args.indexOf("{") != args.lastIndexOf("{")) {
+        return JSON.parse(
+          args.substring(args.indexOf(""), args.indexOf("}") + 1)
+        );
       }
     }
   }
 
   updateUserContext(name, role, text) {
-    if (name !== 'user') {
-      this.userContext.push({ 'role': role, 'name': name, 'content': text });
+    if (name !== "user") {
+      this.userContext.push({ role: role, name: name, content: text });
     } else {
-      this.userContext.push({ 'role': role, 'content': text });
+      this.userContext.push({ role: role, content: text });
     }
   }
 
-  async completion(text, interactionCount, role = 'user', name = 'user') {
+  async completion(text, interactionCount, role = "user", name = "user") {
     this.updateUserContext(name, role, text);
 
     // Step 1: Send user transcription to Chat GPT
     const stream = await this.openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: "gpt-3.5-turbo",
       messages: this.userContext,
       tools: tools,
       stream: true,
     });
 
-    let completeResponse = '';
-    let partialResponse = '';
-    let functionName = '';
-    let functionArgs = '';
-    let finishReason = '';
+    let completeResponse = "";
+    let partialResponse = "";
+    let functionName = "";
+    let functionArgs = "";
+    let finishReason = "";
 
     function collectToolInformation(deltas) {
-      let name = deltas.tool_calls[0]?.function?.name || '';
+      let name = deltas.tool_calls[0]?.function?.name || "";
       console.log(JSON.stringify(deltas.tool_calls[0]?.function, null, 2));
-      if (name != '') {
+      if (name != "") {
         functionName = name;
       }
-      let args = deltas.tool_calls[0]?.function?.arguments || '';
-      if (args != '') {
+      let args = deltas.tool_calls[0]?.function?.arguments || "";
+      if (args != "") {
         // args are streamed as JSON string so we need to concatenate all chunks
         functionArgs += args;
       }
     }
 
     for await (const chunk of stream) {
-      let content = chunk.choices[0]?.delta?.content || '';
+      let content = chunk.choices[0]?.delta?.content || "";
       let deltas = chunk.choices[0].delta;
       finishReason = chunk.choices[0].finish_reason;
 
@@ -176,56 +181,69 @@ YOU ARE NOT A ROBOT. YOU ARE A SUPER-INTELLIGENT, HUMAN-LIKE BOOKING AGENT WHO H
       if (deltas.tool_calls) {
         // Step 3: Collect the tokens containing function data
         collectToolInformation(deltas);
-        console.log(completeResponse,
+        console.log(
+          completeResponse,
           partialResponse,
           functionName,
           functionArgs,
-          finishReason);
+          finishReason
+        );
       }
 
       // need to call function on behalf of Chat GPT with the arguments it parsed from the conversation
-      if (finishReason === 'tool_calls') {
+      if (finishReason === "tool_calls") {
         // parse JSON string of args into JSON object
 
         const functionToCall = availableFunctions[functionName];
         const validatedArgs = this.validateFunctionArgs(functionArgs);
-        
+
         // Say a pre-configured message from the function manifest
         // before running the function.
-        const toolData = tools.find(tool => tool.function.name === functionName);
+        const toolData = tools.find(
+          (tool) => tool.function.name === functionName
+        );
         const say = toolData.function.say;
 
-        this.emit('gptreply', {
-          partialResponseIndex: null,
-          partialResponse: say
-        }, interactionCount);
+        this.emit(
+          "gptreply",
+          {
+            partialResponseIndex: null,
+            partialResponse: say,
+          },
+          interactionCount
+        );
 
         let functionResponse = await functionToCall(validatedArgs);
 
         // Step 4: send the info on the function call and function response to GPT
-        this.updateUserContext(functionName, 'function', functionResponse);
-        
+        this.updateUserContext(functionName, "function", functionResponse);
+
         // call the completion function again but pass in the function response to have OpenAI generate a new assistant response
-        await this.completion(functionResponse, interactionCount, 'function', functionName);
+        await this.completion(
+          functionResponse,
+          interactionCount,
+          "function",
+          functionName
+        );
       } else {
         // We use completeResponse for userContext
         completeResponse += content;
         // We use partialResponse to provide a chunk for TTS
         partialResponse += content;
         // Emit last partial response and add complete response to userContext
-        if (content.trim().slice(-1) === '•' || finishReason === 'stop') {
-          const gptReply = { 
+        if (content.trim().slice(-1) === "•" || finishReason === "stop") {
+          const gptReply = {
             partialResponseIndex: this.partialResponseIndex,
-            partialResponse
+            partialResponse,
           };
 
-          this.emit('gptreply', gptReply, interactionCount);
+          this.emit("gptreply", gptReply, interactionCount);
           this.partialResponseIndex++;
-          partialResponse = '';
+          partialResponse = "";
         }
       }
     }
-    this.userContext.push({'role': 'assistant', 'content': completeResponse});
+    this.userContext.push({ role: "assistant", content: completeResponse });
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
 }

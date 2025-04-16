@@ -1,5 +1,5 @@
-const EventEmitter = require('events');
-const uuid = require('uuid');
+const EventEmitter = require("events");
+const uuid = require("uuid");
 
 class StreamService extends EventEmitter {
   constructor(websocket) {
@@ -7,22 +7,27 @@ class StreamService extends EventEmitter {
     this.ws = websocket;
     this.expectedAudioIndex = 0;
     this.audioBuffer = {};
-    this.streamSid = '';
+    this.streamSid = "";
   }
 
-  setStreamSid (streamSid) {
+  setStreamSid(streamSid) {
     this.streamSid = streamSid;
   }
 
-  buffer (index, audio) {
+  buffer(index, audio) {
     // Escape hatch for intro message, which doesn't have an index
-    if(index === null) {
+    if (index === null) {
       this.sendAudio(audio);
-    } else if(index === this.expectedAudioIndex) {
+    } else if (index === this.expectedAudioIndex) {
       this.sendAudio(audio);
       this.expectedAudioIndex++;
 
-      while(Object.prototype.hasOwnProperty.call(this.audioBuffer, this.expectedAudioIndex)) {
+      while (
+        Object.prototype.hasOwnProperty.call(
+          this.audioBuffer,
+          this.expectedAudioIndex
+        )
+      ) {
         const bufferedAudio = this.audioBuffer[this.expectedAudioIndex];
         this.sendAudio(bufferedAudio);
         this.expectedAudioIndex++;
@@ -32,11 +37,11 @@ class StreamService extends EventEmitter {
     }
   }
 
-  sendAudio (audio) {
+  sendAudio(audio) {
     this.ws.send(
       JSON.stringify({
         streamSid: this.streamSid,
-        event: 'media',
+        event: "media",
         media: {
           payload: audio,
         },
@@ -47,14 +52,14 @@ class StreamService extends EventEmitter {
     this.ws.send(
       JSON.stringify({
         streamSid: this.streamSid,
-        event: 'mark',
+        event: "mark",
         mark: {
-          name: markLabel
-        }
+          name: markLabel,
+        },
       })
     );
-    this.emit('audiosent', markLabel);
+    this.emit("audiosent", markLabel);
   }
 }
 
-module.exports = {StreamService};
+module.exports = { StreamService };
