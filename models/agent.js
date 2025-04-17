@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 // user schema
 const agentSchema = new mongoose.Schema({
   _id: { type: String, default: () => new mongoose.Types.ObjectId() },
-  name: { type: Date },
+  name: { type: String },
   prompts: [
     {
       role: { type: String, default: "" },
