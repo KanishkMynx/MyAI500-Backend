@@ -66,9 +66,9 @@ const incomingCall = async (req, res) => {
   try {
     const response = new VoiceResponse();
     const connect = response.connect();
-    connect.stream({ url: `wss://${process.env.SERVER}/connection` });
-    res.type("text/xml");
-    res.end(response.toString());
+    connect.stream({ url: `wss://${process.env.SERVER}/call/connection`})
+    res.type('text/xml');
+    res.send(response.toString());
   } catch (err) {
     console.log(err);
     res.status(500).json({ message: "Error processing incoming callModel" });
@@ -87,10 +87,11 @@ const callConnection = async (ws) => {
     let username = "anonymous";
     let email = "";
 
+    const gptService = new GptService();
     const streamService = new StreamService(ws);
     const transcriptionService = new TranscriptionService();
     const ttsService = new TextToSpeechService({});
-    const gptService = new GptService();
+    
 
     let marks = [];
     let interactionCount = 0;
@@ -105,7 +106,7 @@ const callConnection = async (ws) => {
         streamService.setStreamSid(streamSid);
         gptService.setCallSid(callSid);
 
-        recordingService(ttsService, callSid).then(() => {
+        await recordingService(ttsService, callSid).then(() => {
           console.log(
             `Twilio -> Starting Media Stream for ${streamSid} at ${getFullISTDateTime(
               callStartTime
