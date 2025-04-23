@@ -148,3 +148,20 @@ fly.toml
 keys.json
 
 # End of https://www.toptal.com/developers/gitignore/api/node
+
+# AWS credentials and secrets
+
+*.pem
+*.key
+*.crt
+
+# SSL certificates
+cert_bundle.pem
+certificate.crt
+private.key
+
+# GitHub config (if it contains sensitive workflows or secrets)
+.github/secrets.yml
+
+# Misc
+*.env.*

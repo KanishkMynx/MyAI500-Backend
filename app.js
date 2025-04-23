@@ -409,6 +409,11 @@ const callSchema = new mongoose.Schema({
 
 const Call = mongoose.model('Call', callSchema);
 
+app.get('/', (req, res) => {
+  res.send('Hello World');
+});
+ 
+
 app.post('/incoming', (req, res) => {
   try {
     const response = new VoiceResponse();
