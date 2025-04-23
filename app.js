@@ -15,7 +15,8 @@ const { getFullISTDateTime } = require("./utils/dateTime");
 const PORT = process.env.PORT || 8000;
 const app = express();
 ExpressWs(app);
-
+app.use(express.urlencoded({ extended: false }));
+app.use(express.json());
 app.use("/call", callRouter);
 app.use("/user", userRouter);
 app.use("/", defaultRouter);
