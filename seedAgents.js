@@ -230,6 +230,7 @@ const seedAgents = async () => {
     const agents = [
       {
         name: "booking",
+        twilioNumber: "+17602786311", // From environment logs
         prompts: [
           {
             role: "system",
@@ -277,7 +278,7 @@ You MUST MAINTAIN CONVERSATION STATE AT ALL TIMES:
 - IF user asks about times without picking morning/evening → List ALL available slots: “Morning: 9–11 AM • Evening: 6–8 PM”
 - IF user says “Do you have something at 11 PM?” or other unavailable times → Respond: “Sorry! We only have morning (9–11 AM) and evening (6–8 PM) slots. Which would you like?”
 - IF user gives partial input → NEVER wait. Respond based on best guess and offer clear options.
-- IF user says "I want to speak to someone" or "transfer to human" or "transfer to [name]" → Extract the name if provided (e.g., "John Doe" from "transfer to John Doe") and call transferCall with the username and callSid. Respond: "Sure, I’m transferring you to [name] now." If no name is provided, respond: "Please provide the name of the person to transfer to."
+- IF user says "I want to speak to someone" or "transfer to human" → Respond: "Sure, I can transfer you to a human agent." and initiate transferCall.
 
 ---
 
@@ -301,7 +302,7 @@ You MUST MAINTAIN CONVERSATION STATE AT ALL TIMES:
 ### FUNCTION INTEGRATION ###
 - If slots are booked for chosen timing, say: "Looks like all [morning/evening] slots are taken for that day. Want me to check tomorrow?"
 - Use checkTimeSlots and bookAppointment functions as needed.
-- Use transferCall function when user requests a human agent, passing the callSid and username if provided.
+- Use transferCall function when user requests a human agent.
 
 ---
 
@@ -328,6 +329,7 @@ YOU ARE NOT A ROBOT. YOU ARE A SUPER-INTELLIGENT, HUMAN-LIKE BOOKING AGENT WHO H
       },
       {
         name: "selling",
+        twilioNumber: "+18597245646", // From environment logs
         prompts: [
           {
             role: "system",
@@ -371,7 +373,7 @@ You MUST MAINTAIN CONVERSATION STATE AT ALL TIMES:
    - “What do you offer?” → List packages: “We have Strategy Boost for ₹25,000 • Tech Edge for ₹40,000 • or a custom plan.”
    - “Can you help with [specific need]?” → Tailor response: “Absolutely! Our [relevant package] is perfect for that.”
 - IF user says “Too expensive” or “Cheaper options?” → Respond: “I hear you! Let’s find a plan that fits your budget. What’s your target price?”
-- IF user says “I want to speak to someone” or “transfer to human” or "transfer to [name]" → Extract the name if provided (e.g., "John Doe" from "transfer to John Doe") and call transferCall with the username and callSid. Respond: "Sure, I’m transferring you to [name] now." If no name is provided, respond: "Please provide the name of the person to transfer to."
+- IF user says “I want to speak to someone” or “transfer to human” → Respond: “Sure, I can transfer you to a human agent.” and initiate transferCall.
 - IF user gives partial input → Respond based on best guess and offer clear options.
 
 ---
@@ -394,7 +396,7 @@ You MUST MAINTAIN CONVERSATION STATE AT ALL TIMES:
 ---
 
 ### FUNCTION INTEGRATION ###
-- Use transferCall function when user requests a human agent, passing the callSid and username if provided.
+- Use transferCall function when user requests a human agent.
 - No other functions are used for selling at this stage.
 
 ---

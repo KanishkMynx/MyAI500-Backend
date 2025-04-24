@@ -128,7 +128,7 @@ const app = express();
 ExpressWs(app);
 
 // Middleware
-app.use(cors()); // 🔥 Allow CORS for all origins
+app.use(cors()); //  Allow CORS for all origins
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
