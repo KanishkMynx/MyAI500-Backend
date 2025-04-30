@@ -62,76 +62,80 @@ class GptService extends EventEmitter {
     }
   }
 
-  async completion(text, interactionCount, role = "user", name = "user") {
-    // When adding user messages
-    if (role === "user") {
-      this.userContext.push({ role: role, content: text });
-    } 
-    // When adding function messages
-    else if (role === "function") {
-      if (!name) {
-        console.error("Function name is required for function messages");
-        return;
+  async completion(text, interactionCount, role = "user", name = null) {
+    try {
+      // Create the message object based on role
+      let message = { role, content: text };
+      
+      // Add name for function messages only
+      if (role === "function") {
+        if (!name) {
+          throw new Error("Function name is required for function messages");
+        }
+        message.name = name;
       }
-      this.userContext.push({ 
-        role: role, 
-        name: name, // Make sure name is included for function messages
-        content: text 
+      
+      // Add message to context
+      this.userContext.push(message);
+
+      console.log("Current context:", JSON.stringify(this.userContext, null, 2));
+
+      const stream = await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: this.userContext,
+        tools: tools,
+        stream: true,
       });
-    }
 
-    const stream = await this.openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: this.userContext,
-      tools: tools,
-      stream: true,
-    });
+      let completeResponse = "";
+      let partialResponse = "";
+      let functionName = "";
+      let functionArgs = "";
+      let finishReason = "";
 
-    let completeResponse = "";
-    let partialResponse = "";
-    let functionName = "";
-    let functionArgs = "";
-    let finishReason = "";
-
-    function collectToolInformation(deltas) {
-      let name = deltas.tool_calls[0]?.function?.name || "";
-      if (name !== "") {
-        functionName = name;
-      }
-      let args = deltas.tool_calls[0]?.function?.arguments || "";
-      if (args !== "") {
-        functionArgs += args;
-      }
-    }
-
-    for await (const chunk of stream) {
-      let content = chunk.choices[0]?.delta?.content || "";
-      let deltas = chunk.choices[0].delta;
-      finishReason = chunk.choices[0].finish_reason;
-
-      if (deltas.tool_calls) {
-        collectToolInformation(deltas);
-      }
-
-      if (finishReason === "tool_calls") {
-        await this.handleFunctionCall(functionName, functionArgs, interactionCount);
-      } else {
-        completeResponse += content;
-        partialResponse += content;
-        if (content.trim().slice(-1) === "•" || finishReason === "stop") {
-          const gptReply = {
-            partialResponseIndex: this.partialResponseIndex,
-            partialResponse,
-          };
-
-          this.emit("gptreply", gptReply, interactionCount);
-          this.partialResponseIndex++;
-          partialResponse = "";
+      function collectToolInformation(deltas) {
+        let name = deltas.tool_calls[0]?.function?.name || "";
+        if (name !== "") {
+          functionName = name;
+        }
+        let args = deltas.tool_calls[0]?.function?.arguments || "";
+        if (args !== "") {
+          functionArgs += args;
         }
       }
+
+      for await (const chunk of stream) {
+        let content = chunk.choices[0]?.delta?.content || "";
+        let deltas = chunk.choices[0].delta;
+        finishReason = chunk.choices[0].finish_reason;
+
+        if (deltas.tool_calls) {
+          collectToolInformation(deltas);
+        }
+
+        if (finishReason === "tool_calls") {
+          await this.handleFunctionCall(functionName, functionArgs, interactionCount);
+        } else {
+          completeResponse += content;
+          partialResponse += content;
+          if (content.trim().slice(-1) === "•" || finishReason === "stop") {
+            const gptReply = {
+              partialResponseIndex: this.partialResponseIndex,
+              partialResponse,
+            };
+
+            this.emit("gptreply", gptReply, interactionCount);
+            this.partialResponseIndex++;
+            partialResponse = "";
+          }
+        }
+      }
+      this.userContext.push({ role: "assistant", content: completeResponse });
+      console.log(`GPT -> user context length: ${this.userContext.length}`.green);
+    } catch (error) {
+      console.error("Error in completion:", error);
+      throw error;
     }
-    this.userContext.push({ role: "assistant", content: completeResponse });
-    console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
 
   async handleFunctionCall(functionName, functionArgs, interactionCount) {
@@ -144,32 +148,30 @@ class GptService extends EventEmitter {
       );
       const say = toolData.function.say;
 
-      console.log(`Invoking ${functionName} with args: ${JSON.stringify(validatedArgs)}`.cyan);
-      
       // Emit the initial response
-      this.emit(
-        "gptreply",
-        {
-          partialResponseIndex: null,
-          partialResponse: say,
-        },
-        interactionCount
-      );
+      this.emit("gptreply", {
+        partialResponseIndex: null,
+        partialResponse: say,
+      }, interactionCount);
 
       // Call the function
       let functionResponse = await functionToCall(validatedArgs);
-      console.log(`Function ${functionName} response: ${functionResponse}`.green);
-
-      // Add the function response to context with the correct name
+      
+      // Add function response to context with explicit name
       await this.completion(
         functionResponse,
         interactionCount,
         "function",
-        functionName  // Make sure to pass the function name
+        functionName
       );
     } catch (error) {
       console.error(`Error in handleFunctionCall: ${error.message}`.red);
-      throw error;
+      // Add error to context to maintain conversation flow
+      await this.completion(
+        "I apologize, but I encountered an error while processing your request. Could you please try again?",
+        interactionCount,
+        "assistant"
+      );
     }
   }
 }
