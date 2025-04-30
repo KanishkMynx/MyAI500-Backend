@@ -63,7 +63,22 @@ class GptService extends EventEmitter {
   }
 
   async completion(text, interactionCount, role = "user", name = "user") {
-    this.updateUserContext(name, role, text);
+    // When adding user messages
+    if (role === "user") {
+      this.userContext.push({ role: role, content: text });
+    } 
+    // When adding function messages
+    else if (role === "function") {
+      if (!name) {
+        console.error("Function name is required for function messages");
+        return;
+      }
+      this.userContext.push({ 
+        role: role, 
+        name: name, // Make sure name is included for function messages
+        content: text 
+      });
+    }
 
     const stream = await this.openai.chat.completions.create({
       model: "gpt-3.5-turbo",
@@ -99,35 +114,7 @@ class GptService extends EventEmitter {
       }
 
       if (finishReason === "tool_calls") {
-        const functionToCall = availableFunctions[functionName];
-        const validatedArgs = this.validateFunctionArgs(functionArgs);
-
-        const toolData = tools.find(
-          (tool) => tool.function.name === functionName
-        );
-        const say = toolData.function.say;
-
-        console.log(`Invoking ${functionName} with args: ${JSON.stringify(validatedArgs)}`.cyan);
-        this.emit(
-          "gptreply",
-          {
-            partialResponseIndex: null,
-            partialResponse: say,
-          },
-          interactionCount
-        );
-
-        let functionResponse = await functionToCall(validatedArgs);
-        console.log(`Function ${functionName} response: ${functionResponse}`.green);
-
-        this.updateUserContext(functionName, "function", functionResponse);
-
-        await this.completion(
-          functionResponse,
-          interactionCount,
-          "function",
-          functionName
-        );
+        await this.handleFunctionCall(functionName, functionArgs, interactionCount);
       } else {
         completeResponse += content;
         partialResponse += content;
@@ -145,6 +132,45 @@ class GptService extends EventEmitter {
     }
     this.userContext.push({ role: "assistant", content: completeResponse });
     console.log(`GPT -> user context length: ${this.userContext.length}`.green);
+  }
+
+  async handleFunctionCall(functionName, functionArgs, interactionCount) {
+    try {
+      const functionToCall = availableFunctions[functionName];
+      const validatedArgs = this.validateFunctionArgs(functionArgs);
+
+      const toolData = tools.find(
+        (tool) => tool.function.name === functionName
+      );
+      const say = toolData.function.say;
+
+      console.log(`Invoking ${functionName} with args: ${JSON.stringify(validatedArgs)}`.cyan);
+      
+      // Emit the initial response
+      this.emit(
+        "gptreply",
+        {
+          partialResponseIndex: null,
+          partialResponse: say,
+        },
+        interactionCount
+      );
+
+      // Call the function
+      let functionResponse = await functionToCall(validatedArgs);
+      console.log(`Function ${functionName} response: ${functionResponse}`.green);
+
+      // Add the function response to context with the correct name
+      await this.completion(
+        functionResponse,
+        interactionCount,
+        "function",
+        functionName  // Make sure to pass the function name
+      );
+    } catch (error) {
+      console.error(`Error in handleFunctionCall: ${error.message}`.red);
+      throw error;
+    }
   }
 }
 
