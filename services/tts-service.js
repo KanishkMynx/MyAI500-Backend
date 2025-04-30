@@ -179,5 +179,6 @@ async generate(gptReply, interactionCount) {
     }
   }
 }
+}
 
 module.exports = { TextToSpeechService };
