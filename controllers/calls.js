@@ -677,6 +677,7 @@ const callConnection = async (ws, req) => {
               username,
               email,
               transcript,
+              agentType,
             });
 
             try {
@@ -684,10 +685,11 @@ const callConnection = async (ws, req) => {
               console.log(
                 `CallModel transcript saved to MongoDB at ${getFullISTDateTime(
                   new Date()
-                )}`.magenta
+                )} for agent: ${agentType}`.magenta
               );
             } catch (error) {
               console.error("Error saving callModel transcript:", error);
+              console.error(error.stack);
             }
 
             try {
@@ -743,6 +745,8 @@ const callConnection = async (ws, req) => {
               now
             )}] Interaction ${interactionCount} - STT -> GPT: ${text}`.yellow
           );
+
+          if (!transcript) transcript = [];
 
           transcript.push({
             user: text,
