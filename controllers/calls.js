@@ -993,6 +993,7 @@ const callConnection = async (ws, req) => {
     let agentType;
     let initialPrompt = "";
     let isSpeaking = false;
+    let errorCount = 0; // Track errors to clear stream if needed
 
     ws.on("message", async function message(data) {
       try {
@@ -1159,7 +1160,6 @@ const callConnection = async (ws, req) => {
           transcriptionService.on("transcription", async (text) => {
             if (!text) return;
             
-            // Wait for current speech to finish and add a 2-second delay
             while (isSpeaking) {
               await new Promise(resolve => setTimeout(resolve, 100));
             }
@@ -1188,8 +1188,13 @@ const callConnection = async (ws, req) => {
             }
 
             try {
-              // Prioritize transfer requests
               if (text.toLowerCase().includes("transfer") && text.toLowerCase().includes("call")) {
+                ws.send(
+                  JSON.stringify({
+                    streamSid,
+                    event: "clear",
+                  })
+                ); // Clear pending audio
                 const transferPrompt = "Sure, I’m transferring you to a human agent now. • Whom would you like to speak to?";
                 ttsService.generate(
                   {
@@ -1199,7 +1204,6 @@ const callConnection = async (ws, req) => {
                   interactionCount
                 );
                 isSpeaking = true;
-                // Add transfer intent to context
                 await gptService.completion(
                   "User requested to transfer the call. Ask for the name of the agent to transfer to.",
                   interactionCount,
@@ -1210,17 +1214,38 @@ const callConnection = async (ws, req) => {
                 await gptService.completion(text, interactionCount);
               }
               interactionCount += 1;
+              errorCount = 0; // Reset error count on successful input
             } catch (err) {
               console.error(`Error in GPT completion: ${err.message}`.red);
-              const errorMessage = "Sorry, I hit a snag. • Let's try again.";
-              ttsService.generate(
-                {
-                  partialResponseIndex: null,
-                  partialResponse: errorMessage,
-                },
-                interactionCount
-              );
-              isSpeaking = true;
+              errorCount++;
+              if (errorCount > 3) {
+                ws.send(
+                  JSON.stringify({
+                    streamSid,
+                    event: "clear",
+                  })
+                ); // Clear stream to prevent overload
+                const errorMessage = "I'm having trouble. • Would you like to transfer to a human agent?";
+                ttsService.generate(
+                  {
+                    partialResponseIndex: null,
+                    partialResponse: errorMessage,
+                  },
+                  interactionCount
+                );
+                isSpeaking = true;
+                errorCount = 0;
+              } else {
+                const errorMessage = "Sorry, I hit a snag. • Let's try again.";
+                ttsService.generate(
+                  {
+                    partialResponseIndex: null,
+                    partialResponse: errorMessage,
+                  },
+                  interactionCount
+                );
+                isSpeaking = true;
+              }
             }
           });
 

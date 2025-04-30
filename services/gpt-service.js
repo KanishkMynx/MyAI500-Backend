@@ -171,8 +171,10 @@ class GptService extends EventEmitter {
     this.agentType = agentType;
     this.partialResponseIndex = 0;
     this.userContext = [];
-    this.errorCount = 0; // Track consecutive errors
-    this.maxErrors = 3; // Max errors before fallback
+    this.errorCount = 0;
+    this.maxErrors = 3;
+    this.retryDelay = 1000; // Initial delay in ms for rate limit retries
+    this.maxRetries = 3; // Max retries for rate limit errors
     this.initializeAgentPrompt();
   }
 
@@ -212,14 +214,30 @@ class GptService extends EventEmitter {
 
   updateUserContext(name, role, text) {
     const message = { role, content: text };
-    if (role === "function" || name !== "user") {
+    if (role === "function") {
+      message.name = name; // Always set name for function role
+    } else if (name !== "user" && role !== "user") {
       message.name = name;
     }
     this.userContext.push(message);
+    console.log(`Context updated: ${JSON.stringify(message)}`.cyan);
   }
 
-  async completion(text, interactionCount, role = "user", name = "user") {
+  async delay(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  async completion(text, interactionCount, role = "user", name = "user", retryCount = 0) {
     this.updateUserContext(name, role, text);
+
+    // Trim context to reduce token usage (keep last 10 messages)
+    if (this.userContext.length > 10) {
+      this.userContext = [
+        ...this.userContext.slice(0, 2), // Keep system prompts
+        ...this.userContext.slice(-8), // Keep last 8 messages
+      ];
+      console.log(`Trimmed context to ${this.userContext.length} messages to reduce tokens`.yellow);
+    }
 
     try {
       const stream = await this.openai.chat.completions.create({
@@ -280,18 +298,15 @@ class GptService extends EventEmitter {
 
             this.updateUserContext(functionName, "function", functionResponse);
 
-            // Handle booking or slot check errors
             if (
               (functionName === "bookAppointment" && functionResponse.includes("Sorry")) ||
               (functionName === "checkTimeSlots" && functionResponse.includes("No available slots"))
             ) {
-              // Slot unavailable or invalid, guide user to pick another time
               this.updateUserContext(
                 "system",
                 "system",
                 "The selected time slot is unavailable or no slots are available. Prompt the user to choose another time or try a different day."
               );
-              // Call checkTimeSlots to refresh available slots
               const checkSlotsResponse = await availableFunctions["checkTimeSlots"]({});
               this.updateUserContext("checkTimeSlots", "function", checkSlotsResponse);
               functionResponse = checkSlotsResponse;
@@ -301,7 +316,8 @@ class GptService extends EventEmitter {
               functionResponse,
               interactionCount,
               "function",
-              functionName
+              functionName,
+              0
             );
           } catch (error) {
             console.error(`Error in function ${functionName}: ${error.message}`.red);
@@ -309,7 +325,7 @@ class GptService extends EventEmitter {
             let errorMessage = `Something went wrong with ${functionName}. • Let's try again.`;
             if (this.errorCount >= this.maxErrors) {
               errorMessage = "I'm having trouble processing your request. • Would you like to transfer to a human agent?";
-              this.errorCount = 0; // Reset error count
+              this.errorCount = 0;
             }
             this.updateUserContext("system", "system", errorMessage);
             this.emit(
@@ -320,12 +336,13 @@ class GptService extends EventEmitter {
               },
               interactionCount
             );
-            // Restart the booking flow or prompt for transfer
+            await this.delay(2000); // Pause to allow user input
             await this.completion(
               this.errorCount === 0 ? "Please choose a time slot for your appointment." : "Would you like to transfer to a human agent?",
               interactionCount,
               "assistant",
-              "assistant"
+              "assistant",
+              0
             );
           }
         } else {
@@ -340,7 +357,7 @@ class GptService extends EventEmitter {
             this.emit("gptreply", gptReply, interactionCount);
             this.partialResponseIndex++;
             partialResponse = "";
-            this.errorCount = 0; // Reset error count on successful response
+            this.errorCount = 0;
           }
         }
       }
@@ -349,6 +366,14 @@ class GptService extends EventEmitter {
     } catch (error) {
       console.error(`Error in GPT completion: ${error.message}`.red);
       this.errorCount++;
+
+      if (error.status === 429 && retryCount < this.maxRetries) {
+        const delayMs = this.retryDelay * Math.pow(2, retryCount); // Exponential backoff
+        console.log(`Rate limit hit, retrying in ${delayMs}ms...`.yellow);
+        await this.delay(delayMs);
+        return await this.completion(text, interactionCount, role, name, retryCount + 1);
+      }
+
       let errorMessage = "Sorry, I hit a snag. • Let's try again.";
       if (this.errorCount >= this.maxErrors) {
         errorMessage = "I'm having trouble processing your request. • Would you like to transfer to a human agent?";
@@ -363,12 +388,26 @@ class GptService extends EventEmitter {
         },
         interactionCount
       );
-      await this.completion(
-        this.errorCount === 0 ? "Please choose a time slot for your appointment." : "Would you like to transfer to a human agent?",
-        interactionCount,
-        "assistant",
-        "assistant"
-      );
+      await this.delay(2000); // Pause to allow user input
+      if (retryCount < this.maxRetries) {
+        await this.completion(
+          this.errorCount === 0 ? "Please choose a time slot for your appointment." : "Would you like to transfer to a human agent?",
+          interactionCount,
+          "assistant",
+          "assistant",
+          retryCount + 1
+        );
+      } else {
+        console.log("Max retries reached, pausing to prevent loop".red);
+        this.emit(
+          "gptreply",
+          {
+            partialResponseIndex: null,
+            partialResponse: "I'm having trouble. • Please try again later or request a transfer.",
+          },
+          interactionCount
+        );
+      }
     }
   }
 }
