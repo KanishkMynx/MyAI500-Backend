@@ -832,7 +832,6 @@
 
 
 
-// controllers/call.js
 const twilio = require("twilio");
 const { VoiceResponse } = require("twilio").twiml;
 
@@ -993,7 +992,7 @@ const callConnection = async (ws, req) => {
     let email = "";
     let agentType;
     let initialPrompt = "";
-    let isSpeaking = false; // Track if the agent is currently speaking
+    let isSpeaking = false;
 
     ws.on("message", async function message(data) {
       try {
@@ -1080,7 +1079,7 @@ const callConnection = async (ws, req) => {
                   }): ${label} at ${formatISTTime(new Date())}`.red
                 );
                 marks = marks.filter((m) => m !== msg.mark.name);
-                isSpeaking = false; // Speech has completed
+                isSpeaking = false;
               } else if (msg.event === "stop") {
                 callEndTime = new Date();
                 console.log(
@@ -1164,7 +1163,7 @@ const callConnection = async (ws, req) => {
             while (isSpeaking) {
               await new Promise(resolve => setTimeout(resolve, 100));
             }
-            await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second pause
+            await new Promise(resolve => setTimeout(resolve, 2000));
 
             const now = new Date();
             console.log(
@@ -1189,7 +1188,27 @@ const callConnection = async (ws, req) => {
             }
 
             try {
-              await gptService.completion(text, interactionCount);
+              // Prioritize transfer requests
+              if (text.toLowerCase().includes("transfer") && text.toLowerCase().includes("call")) {
+                const transferPrompt = "Sure, I’m transferring you to a human agent now. • Whom would you like to speak to?";
+                ttsService.generate(
+                  {
+                    partialResponseIndex: null,
+                    partialResponse: transferPrompt,
+                  },
+                  interactionCount
+                );
+                isSpeaking = true;
+                // Add transfer intent to context
+                await gptService.completion(
+                  "User requested to transfer the call. Ask for the name of the agent to transfer to.",
+                  interactionCount,
+                  "system",
+                  "system"
+                );
+              } else {
+                await gptService.completion(text, interactionCount);
+              }
               interactionCount += 1;
             } catch (err) {
               console.error(`Error in GPT completion: ${err.message}`.red);
@@ -1207,11 +1226,10 @@ const callConnection = async (ws, req) => {
 
           gptService.on("gptreply", async (gptReply, icount) => {
             try {
-              // Wait for current speech to finish and add a 2-second delay
               while (isSpeaking) {
                 await new Promise(resolve => setTimeout(resolve, 100));
               }
-              await new Promise(resolve => setTimeout(resolve, 2000)); // 2-second pause
+              await new Promise(resolve => setTimeout(resolve, 2000));
 
               const now = new Date();
               console.log(

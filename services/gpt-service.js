@@ -152,7 +152,6 @@
 
 
 
-// gpt-service.js
 require("colors");
 const EventEmitter = require("events");
 const OpenAI = require("openai");
@@ -172,6 +171,8 @@ class GptService extends EventEmitter {
     this.agentType = agentType;
     this.partialResponseIndex = 0;
     this.userContext = [];
+    this.errorCount = 0; // Track consecutive errors
+    this.maxErrors = 3; // Max errors before fallback
     this.initializeAgentPrompt();
   }
 
@@ -210,131 +211,165 @@ class GptService extends EventEmitter {
   }
 
   updateUserContext(name, role, text) {
-    if (name !== "user") {
-      this.userContext.push({ role: role, name: name, content: text });
-    } else {
-      this.userContext.push({ role: role, content: text });
+    const message = { role, content: text };
+    if (role === "function" || name !== "user") {
+      message.name = name;
     }
+    this.userContext.push(message);
   }
 
   async completion(text, interactionCount, role = "user", name = "user") {
     this.updateUserContext(name, role, text);
 
-    const stream = await this.openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
-      messages: this.userContext,
-      tools: tools,
-      stream: true,
-    });
+    try {
+      const stream = await this.openai.chat.completions.create({
+        model: "gpt-3.5-turbo",
+        messages: this.userContext,
+        tools: tools,
+        stream: true,
+      });
 
-    let completeResponse = "";
-    let partialResponse = "";
-    let functionName = "";
-    let functionArgs = "";
-    let finishReason = "";
+      let completeResponse = "";
+      let partialResponse = "";
+      let functionName = "";
+      let functionArgs = "";
+      let finishReason = "";
 
-    function collectToolInformation(deltas) {
-      let name = deltas.tool_calls[0]?.function?.name || "";
-      if (name !== "") {
-        functionName = name;
-      }
-      let args = deltas.tool_calls[0]?.function?.arguments || "";
-      if (args !== "") {
-        functionArgs += args;
-      }
-    }
-
-    for await (const chunk of stream) {
-      let content = chunk.choices[0]?.delta?.content || "";
-      let deltas = chunk.choices[0].delta;
-      finishReason = chunk.choices[0].finish_reason;
-
-      if (deltas.tool_calls) {
-        collectToolInformation(deltas);
+      function collectToolInformation(deltas) {
+        let name = deltas.tool_calls[0]?.function?.name || "";
+        if (name !== "") {
+          functionName = name;
+        }
+        let args = deltas.tool_calls[0]?.function?.arguments || "";
+        if (args !== "") {
+          functionArgs += args;
+        }
       }
 
-      if (finishReason === "tool_calls") {
-        const functionToCall = availableFunctions[functionName];
-        const validatedArgs = this.validateFunctionArgs(functionArgs);
+      for await (const chunk of stream) {
+        let content = chunk.choices[0]?.delta?.content || "";
+        let deltas = chunk.choices[0].delta;
+        finishReason = chunk.choices[0].finish_reason;
 
-        const toolData = tools.find(
-          (tool) => tool.function.name === functionName
-        );
-        const say = toolData.function.say;
+        if (deltas.tool_calls) {
+          collectToolInformation(deltas);
+        }
 
-        console.log(`Invoking ${functionName} with args: ${JSON.stringify(validatedArgs)}`.cyan);
-        this.emit(
-          "gptreply",
-          {
-            partialResponseIndex: null,
-            partialResponse: say,
-          },
-          interactionCount
-        );
+        if (finishReason === "tool_calls") {
+          const functionToCall = availableFunctions[functionName];
+          const validatedArgs = this.validateFunctionArgs(functionArgs);
 
-        try {
-          let functionResponse = await functionToCall(validatedArgs);
-          console.log(`Function ${functionName} response: ${functionResponse}`.green);
-
-          this.updateUserContext(functionName, "function", functionResponse);
-
-          // Handle booking errors (e.g., slot unavailable)
-          if (functionName === "bookAppointment" && functionResponse.includes("Sorry")) {
-            // Slot unavailable or invalid, guide user to pick another time
-            this.updateUserContext(
-              "system",
-              "system",
-              "The selected time slot is unavailable. Prompt the user to choose another time from available slots."
-            );
-            // Call checkTimeSlots to refresh available slots
-            const checkSlotsResponse = await availableFunctions["checkTimeSlots"]({});
-            this.updateUserContext("checkTimeSlots", "function", checkSlotsResponse);
-            functionResponse = checkSlotsResponse;
-          }
-
-          await this.completion(
-            functionResponse,
-            interactionCount,
-            "function",
-            functionName
+          const toolData = tools.find(
+            (tool) => tool.function.name === functionName
           );
-        } catch (error) {
-          console.error(`Error in function ${functionName}: ${error.message}`.red);
-          const errorMessage = `Something went wrong with ${functionName}. • Let's try again.`;
-          this.updateUserContext("system", "system", errorMessage);
+          const say = toolData.function.say;
+
+          console.log(`Invoking ${functionName} with args: ${JSON.stringify(validatedArgs)}`.cyan);
           this.emit(
             "gptreply",
             {
               partialResponseIndex: null,
-              partialResponse: errorMessage,
+              partialResponse: say,
             },
             interactionCount
           );
-          // Restart the booking flow
-          await this.completion(
-            "Please choose a time slot for your appointment.",
-            interactionCount,
-            "assistant",
-            "assistant"
-          );
-        }
-      } else {
-        completeResponse += content;
-        partialResponse += content;
-        if (content.trim().slice(-1) === "•" || finishReason === "stop") {
-          const gptReply = {
-            partialResponseIndex: this.partialResponseIndex,
-            partialResponse,
-          };
 
-          this.emit("gptreply", gptReply, interactionCount);
-          this.partialResponseIndex++;
-          partialResponse = "";
+          try {
+            let functionResponse = await functionToCall(validatedArgs);
+            console.log(`Function ${functionName} response: ${functionResponse}`.green);
+
+            this.updateUserContext(functionName, "function", functionResponse);
+
+            // Handle booking or slot check errors
+            if (
+              (functionName === "bookAppointment" && functionResponse.includes("Sorry")) ||
+              (functionName === "checkTimeSlots" && functionResponse.includes("No available slots"))
+            ) {
+              // Slot unavailable or invalid, guide user to pick another time
+              this.updateUserContext(
+                "system",
+                "system",
+                "The selected time slot is unavailable or no slots are available. Prompt the user to choose another time or try a different day."
+              );
+              // Call checkTimeSlots to refresh available slots
+              const checkSlotsResponse = await availableFunctions["checkTimeSlots"]({});
+              this.updateUserContext("checkTimeSlots", "function", checkSlotsResponse);
+              functionResponse = checkSlotsResponse;
+            }
+
+            await this.completion(
+              functionResponse,
+              interactionCount,
+              "function",
+              functionName
+            );
+          } catch (error) {
+            console.error(`Error in function ${functionName}: ${error.message}`.red);
+            this.errorCount++;
+            let errorMessage = `Something went wrong with ${functionName}. • Let's try again.`;
+            if (this.errorCount >= this.maxErrors) {
+              errorMessage = "I'm having trouble processing your request. • Would you like to transfer to a human agent?";
+              this.errorCount = 0; // Reset error count
+            }
+            this.updateUserContext("system", "system", errorMessage);
+            this.emit(
+              "gptreply",
+              {
+                partialResponseIndex: null,
+                partialResponse: errorMessage,
+              },
+              interactionCount
+            );
+            // Restart the booking flow or prompt for transfer
+            await this.completion(
+              this.errorCount === 0 ? "Please choose a time slot for your appointment." : "Would you like to transfer to a human agent?",
+              interactionCount,
+              "assistant",
+              "assistant"
+            );
+          }
+        } else {
+          completeResponse += content;
+          partialResponse += content;
+          if (content.trim().slice(-1) === "•" || finishReason === "stop") {
+            const gptReply = {
+              partialResponseIndex: this.partialResponseIndex,
+              partialResponse,
+            };
+
+            this.emit("gptreply", gptReply, interactionCount);
+            this.partialResponseIndex++;
+            partialResponse = "";
+            this.errorCount = 0; // Reset error count on successful response
+          }
         }
       }
+      this.userContext.push({ role: "assistant", content: completeResponse });
+      console.log(`GPT -> user context length: ${this.userContext.length}`.green);
+    } catch (error) {
+      console.error(`Error in GPT completion: ${error.message}`.red);
+      this.errorCount++;
+      let errorMessage = "Sorry, I hit a snag. • Let's try again.";
+      if (this.errorCount >= this.maxErrors) {
+        errorMessage = "I'm having trouble processing your request. • Would you like to transfer to a human agent?";
+        this.errorCount = 0;
+      }
+      this.updateUserContext("system", "system", errorMessage);
+      this.emit(
+        "gptreply",
+        {
+          partialResponseIndex: null,
+          partialResponse: errorMessage,
+        },
+        interactionCount
+      );
+      await this.completion(
+        this.errorCount === 0 ? "Please choose a time slot for your appointment." : "Would you like to transfer to a human agent?",
+        interactionCount,
+        "assistant",
+        "assistant"
+      );
     }
-    this.userContext.push({ role: "assistant", content: completeResponse });
-    console.log(`GPT -> user context length: ${this.userContext.length}`.green);
   }
 }
 
