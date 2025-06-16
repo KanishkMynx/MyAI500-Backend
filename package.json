@@ -15,6 +15,7 @@
   "license": "MIT",
   "dependencies": {
     "@deepgram/sdk": "^3.3.4",
+    "@google/generative-ai": "^0.24.1",
     "colors": "^1.4.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
