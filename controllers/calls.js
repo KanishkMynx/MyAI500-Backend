@@ -211,8 +211,8 @@ const callConnection = async (ws, req) => {
 
           await recordingService(ttsService, callSid).then(() => {
             const initialGreeting = agentType === "booking"
-              ? "Hello! I’m here to book your appointment with Inzint. • Are you ready?"
-              : "Hi! I’m here to share Inzint’s expert services. • Interested?";
+            ? "Thank you for calling Accident Centers of Texas. This is Riley, your scheduling assistant. How may I help you today?"
+            : "Hi! I'm here to share Mynx's expert services. • Interested?";
             initialPrompt = initialGreeting;
             console.log(`Initial greeting: ${initialGreeting}`.cyan);
             console.log(
