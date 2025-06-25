@@ -4,6 +4,7 @@ require("colors");
 const express = require("express");
 const cors = require("cors");
 const ExpressWs = require("express-ws");
+const axios = require('axios');
 
 const { agentRouter } = require("./routes/agent");
 const { callRouter } = require("./routes/calls");
@@ -46,4 +47,14 @@ app.listen(PORT, () => {
   console.log(
     `Server started on port ${PORT} at ${getFullISTDateTime(new Date())}`.green
   );
+});
+
+app.get('/ip-check', async (req, res) => {
+  try {
+    const response = await axios.get('https://api64.ipify.org?format=json');
+    res.json({ ip: response.data.ip });
+  } catch (err) {
+    console.error('IP check failed:', err);
+    res.status(500).json({ error: 'Failed to get IP' });
+  }
 });
