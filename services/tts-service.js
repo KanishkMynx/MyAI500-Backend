@@ -9,7 +9,7 @@ class TextToSpeechService extends EventEmitter {
     this.nextExpectedIndex = 0;
     this.speechBuffer = {};
     this.voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Default to Rachel voice
-    this.model = "eleven_multilingual_v2";
+    this.model = "eleven_flash_v2";
     this.optimizationLevel = 3; // Highest optimization for latency
   }
 
