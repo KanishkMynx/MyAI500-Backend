@@ -8,6 +8,9 @@ class TextToSpeechService extends EventEmitter {
     super();
     this.nextExpectedIndex = 0;
     this.speechBuffer = {};
+    this.voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Default to Rachel voice
+    this.model = "eleven_multilingual_v2";
+    this.optimizationLevel = 3; // Highest optimization for latency
   }
 
   async generate(gptReply, interactionCount) {
@@ -24,23 +27,30 @@ class TextToSpeechService extends EventEmitter {
       try {
         console.log(`Attempt ${attempt} to generate TTS for: ${partialResponse}`.cyan);
         const response = await fetch(
-          `https://api.deepgram.com/v1/speak?model=${process.env.VOICE_MODEL}&encoding=mulaw&sample_rate=8000&container=none`,
+          `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`,
           {
             method: "POST",
             headers: {
-              Authorization: `Token ${process.env.DEEPGRAM_API_KEY}`,
+              "xi-api-key": process.env.ELEVENLABS_API_KEY,
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
               text: partialResponse,
+              model_id: this.model,
+              voice_settings: {
+                stability: 0.5,
+                similarity_boost: 0.75,
+                style: 0.5,
+                use_speaker_boost: true
+              },
+              optimize_streaming_latency: this.optimizationLevel
             }),
-            timeout: 10000, // 10-second timeout
-          }
-        );
+            timeout: 5000,
+           }
+          ); // 5-second timeout for lower latency
 
         if (response.status === 200) {
-          const blob = await response.blob();
-          const audioArrayBuffer = await blob.arrayBuffer();
+          const audioArrayBuffer = await response.arrayBuffer();
           const base64String = Buffer.from(audioArrayBuffer).toString("base64");
           this.emit(
             "speech",
@@ -52,7 +62,7 @@ class TextToSpeechService extends EventEmitter {
           console.log(`TTS generation successful for: ${partialResponse}`.green);
           return;
         } else {
-          console.log(`Deepgram TTS error (Status: ${response.status}): ${await response.text()}`.yellow);
+          console.log(`ElevenLabs TTS error (Status: ${response.status}): ${await response.text()}`.yellow);
           if (attempt === maxRetries) throw new Error(`Failed after ${maxRetries} attempts with status ${response.status}`);
         }
       } catch (err) {
@@ -65,3 +75,7 @@ class TextToSpeechService extends EventEmitter {
 }
 
 module.exports = { TextToSpeechService };
+
+
+
+

@@ -3,7 +3,6 @@ const { VoiceResponse } = require("twilio").twiml;
 
 const { callModel } = require("../models/call");
 const { agentModel } = require("../models/agent");
-const { StreamService } = require("../services/stream-service");
 const { TranscriptionService } = require("../services/transcription-service");
 const { TextToSpeechService } = require("../services/tts-service");
 const { recordingService } = require("../services/recording-service");
@@ -194,11 +193,10 @@ const callConnection = async (ws, req) => {
           console.log(`Final selected agentType: ${agentType}`.cyan);
 
           const gptService = new GptService(agentType);
-          const streamService = new StreamService(ws);
           const transcriptionService = new TranscriptionService();
           const ttsService = new TextToSpeechService({});
 
-          streamService.setStreamSid(streamSid);
+          
           gptService.setCallSid(callSid);
 
           let agentDoc = await agentModel.findOne({ name: agentType });
@@ -211,7 +209,7 @@ const callConnection = async (ws, req) => {
 
           await recordingService(ttsService, callSid).then(() => {
             const initialGreeting = agentType === "booking"
-            ? "Thank you for calling Accident Centers of Texas. This is Riley, your scheduling assistant. How may I help you today?"
+            ? "Thank you for calling ACT. This is Riley, your scheduling assistant. How may I help you today?"
             : "Hi! I'm here to share Mynx's expert services. • Interested?";
             initialPrompt = initialGreeting;
             console.log(`Initial greeting: ${initialGreeting}`.cyan);
@@ -454,11 +452,19 @@ const callConnection = async (ws, req) => {
                 new Date()
               )}] Interaction ${icount}: TTS -> TWILIO: ${label}`.blue
             );
-            streamService.buffer(responseIndex, audio);
+            ws.send(
+              JSON.stringify({
+                streamSid,
+                event: "audio",
+                audio,
+                label,
+              })
+            );
           });
 
-          streamService.on("audiosent", (markLabel) => {
-            marks.push(markLabel);
+          ws.on("close", () => {
+            console.log(`WebSocket connection closed for stream ${streamSid}`);
+            // Perform any necessary cleanup or resource release
           });
         }
       } catch (err) {
