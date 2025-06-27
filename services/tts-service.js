@@ -75,7 +75,3 @@ class TextToSpeechService extends EventEmitter {
 }
 
 module.exports = { TextToSpeechService };
-
-
-
-

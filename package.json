@@ -16,9 +16,10 @@
   "dependencies": {
     "@deepgram/sdk": "^3.3.4",
     "@google/generative-ai": "^0.24.1",
+    "axios": "^1.10.0",
     "colors": "^1.4.0",
     "cors": "^2.8.5",
-    "dotenv": "^16.4.7",
+    "dotenv": "^16.5.0",
     "express": "^4.19.2",
     "express-ws": "^5.0.2",
     "googleapis": "^140.0.1",
@@ -31,7 +32,7 @@
     "twilio": "^4.19.3",
     "uuid": "^9.0.1",
     "wavefile": "^11.0.0",
-    "ws": "^8.16.0"
+    "ws": "^8.18.2"
   },
   "devDependencies": {
     "@flydotio/dockerfile": "^0.4.11",
