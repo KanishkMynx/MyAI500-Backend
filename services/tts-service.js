@@ -2,15 +2,35 @@ require("dotenv").config();
 const { Buffer } = require("node:buffer");
 const EventEmitter = require("events");
 const fetch = require("node-fetch");
+const ffmpeg = require("fluent-ffmpeg");
+const { Readable } = require("stream");
 
 class TextToSpeechService extends EventEmitter {
   constructor() {
     super();
     this.nextExpectedIndex = 0;
     this.speechBuffer = {};
-    this.voiceId = process.env.ELEVENLABS_VOICE_ID || "21m00Tcm4TlvDq8ikWAM"; // Default to Rachel voice
-    this.model = "eleven_flash_v2";
-    this.optimizationLevel = 3; // Highest optimization for latency
+  }
+
+  // Convert MP3 buffer to mulaw
+  async convertToMulaw(mp3Buffer) {
+    return new Promise((resolve, reject) => {
+      const inputStream = new Readable();
+      inputStream.push(mp3Buffer);
+      inputStream.push(null);
+
+      const outputBuffers = [];
+      ffmpeg(inputStream)
+        .inputFormat("mp3")
+        .audioCodec("pcm_mulaw")
+        .audioFrequency(8000)
+        .audioChannels(1)
+        .format("mulaw")
+        .on("error", (err) => reject(new Error(`FFmpeg error: ${err.message}`)))
+        .on("end", () => resolve(Buffer.concat(outputBuffers)))
+        .pipe()
+        .on("data", (chunk) => outputBuffers.push(chunk));
+    });
   }
 
   async generate(gptReply, interactionCount) {
@@ -25,33 +45,42 @@ class TextToSpeechService extends EventEmitter {
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        console.log(`Attempt ${attempt} to generate TTS for: ${partialResponse}`.cyan);
+        console.log(`Attempt ${attempt} to generate TTS for: ${partialResponse}`);
         const response = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${this.voiceId}/stream`,
+          `https://api.elevenlabs.io/v1/text-to-speech/${process.env.ELEVENLABS_VOICE_ID}?optimize_streaming_latency=4`,
           {
             method: "POST",
             headers: {
-              "xi-api-key": process.env.ELEVENLABS_API_KEY,
+              "xi-api-key": `${process.env.ELEVENLABS_API_KEY}`,
               "Content-Type": "application/json",
+              "Accept": "audio/mpeg"
             },
             body: JSON.stringify({
               text: partialResponse,
-              model_id: this.model,
+              model_id: "eleven_multilingual_v2",
               voice_settings: {
                 stability: 0.5,
                 similarity_boost: 0.75,
-                style: 0.5,
+                style: 0.2,
                 use_speaker_boost: true
-              },
-              optimize_streaming_latency: this.optimizationLevel
+              }
             }),
-            timeout: 5000,
-           }
-          ); // 5-second timeout for lower latency
+            timeout: 10000 // 10-second timeout
+          }
+        );
 
         if (response.status === 200) {
-          const audioArrayBuffer = await response.arrayBuffer();
-          const base64String = Buffer.from(audioArrayBuffer).toString("base64");
+          const blob = await response.blob();
+          const audioArrayBuffer = await blob.arrayBuffer();
+          console.log(`MP3 buffer size: ${audioArrayBuffer.byteLength} bytes`);
+
+          // Convert to mulaw
+          const mulawBuffer = await this.convertToMulaw(Buffer.from(audioArrayBuffer));
+          console.log(`Mulaw buffer size: ${mulawBuffer.length} bytes`);
+
+          const base64String = mulawBuffer.toString("base64");
+          console.log(`Base64 string length: ${base64String.length}`);
+
           this.emit(
             "speech",
             partialResponseIndex,
@@ -59,10 +88,10 @@ class TextToSpeechService extends EventEmitter {
             partialResponse,
             interactionCount
           );
-          console.log(`TTS generation successful for: ${partialResponse}`.green);
+          console.log(`TTS generation successful for: ${partialResponse}`);
           return;
         } else {
-          console.log(`ElevenLabs TTS error (Status: ${response.status}): ${await response.text()}`.yellow);
+          console.log(`ElevenLabs TTS error (Status: ${response.status}): ${await response.text()}`);
           if (attempt === maxRetries) throw new Error(`Failed after ${maxRetries} attempts with status ${response.status}`);
         }
       } catch (err) {
