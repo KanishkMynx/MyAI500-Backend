@@ -3,10 +3,7 @@ const mongoose = require("mongoose");
 
 // mongodb connection and schema details
 function connectDB(url) {
-  mongoose.connect(url, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-  });
+  mongoose.connect(url);
   const db = mongoose.connection;
   db.on("error", console.error.bind(console, "MongoDB connection error:"));
   db.once("open", () => {
