@@ -1,19 +1,17 @@
-// imports
 const mongoose = require("mongoose");
 
-// mongodb connection and schema details
-function connectDB(url) {
-  mongoose.connect(url);
-  const db = mongoose.connection;
-  db.on("error", console.error.bind(console, "MongoDB connection error:"));
-  db.once("open", () => {
-    console.log("MongoDB connected");
-  });
-  return db;
+let isConnected = false;
+
+async function connectDB() {
+  if (isConnected) return;
+  try {
+    await mongoose.connect(process.env.MONGODB_URI);
+    isConnected = true;
+    console.log("MongoDB connected".green);
+  } catch (err) {
+    console.error(`MongoDB connection error: ${err.message}`.red);
+    throw err;
+  }
 }
 
 module.exports = { connectDB };
-//     const callSchema = new mongoose.Schema({
-//       callStartTime: { type: Date },
-//       callEndTime: { type: Date },
-//       callDuration: { type: String },

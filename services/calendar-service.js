@@ -23,14 +23,17 @@ const auth = new google.auth.JWT({
   scopes: SCOPES,
 });
 
-const calendarId =
-  "5e8e29a689c0ec7f93a3ed065f7ad6f21e25696863e8977f10fd6dc6cc8ef4cf@group.calendar.google.com";
+const calendarId ="0771955da26d9e784c5a784aa6db94d39a7263b538f60ea6d9018ba423db5afe@group.calendar.google.com";
 const calendar = google.calendar({ version: "v3", auth });
 
-const getAvailableTimeSlots = async () => {
+const getAvailableTimeSlots = async (day = 'today') => {
   const now = moment.tz("Asia/Kolkata");
-  const startDateTime = moment.tz("Asia/Kolkata").startOf("day");
+  const startDateTime = day === 'tomorrow'
+    ? moment.tz("Asia/Kolkata").add(1, 'day').startOf("day")
+    : moment.tz("Asia/Kolkata").startOf("day");
   const endDateTime = moment.tz(startDateTime, "Asia/Kolkata").endOf("day");
+
+  console.log(`Fetching slots for ${day}: ${startDateTime.format('YYYY-MM-DD')}`.blue);
 
   try {
     const response = await calendar.freebusy.query({
@@ -45,53 +48,45 @@ const getAvailableTimeSlots = async () => {
     const busyTimes = response.data.calendars[calendarId].busy;
     const availableSlots = [];
 
-    let currentTime = moment
-      .tz(startDateTime, "Asia/Kolkata")
-      .set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
-    if (now.isAfter(currentTime)) {
-      currentTime = now
-        .startOf("hour")
-        .add(now.minute() > 30 ? 1 : 0, "hours")
-        .minute(now.minute() > 30 ? 0 : 30);
+    let currentTime = moment.tz(startDateTime, "Asia/Kolkata").set({ hour: 9, minute: 0, second: 0, millisecond: 0 });
+    if (now.isAfter(currentTime) && day === 'today') {
+      currentTime = now.startOf("hour").add(now.minute() > 30 ? 1 : 0, "hours").minute(now.minute() > 30 ? 0 : 30);
     }
-    const endOfDayTime = moment
-      .tz(startDateTime, "Asia/Kolkata")
-      .set({ hour: 21, minute: 0, second: 0, millisecond: 0 });
+    const endOfDayTime = moment.tz(startDateTime, "Asia/Kolkata").set({ hour: 21, minute: 0, second: 0, millisecond: 0 });
 
     while (currentTime < endOfDayTime) {
       const nextTime = moment(currentTime).add(30, "minutes");
-
-      const isBusy = busyTimes.some((busyTime) => {
-        const busyStart = moment(busyTime.start);
-        const busyEnd = moment(busyTime.end);
-        return (
-          (currentTime >= busyStart && currentTime < busyEnd) ||
-          (nextTime > busyStart && nextTime <= busyEnd)
-        );
-      });
-
-      if (!isBusy) {
-        availableSlots.push({
-          startTS: currentTime.toISOString(),
-          startTime: currentTime.format("hh:mm A"),
-          endTS: nextTime.toISOString(),
-          endTime: nextTime.format("hh:mm A"),
+      const hour = currentTime.hour();
+      if ((hour >= 9 && hour < 11) || (hour >= 18 && hour < 20)) {
+        const isBusy = busyTimes.some((busyTime) => {
+          const busyStart = moment(busyTime.start);
+          const busyEnd = moment(busyTime.end);
+          return (
+            (currentTime >= busyStart && currentTime < busyEnd) ||
+            (nextTime > busyStart && nextTime <= busyEnd)
+          );
         });
-      }
 
+        if (!isBusy) {
+          availableSlots.push({
+            startTS: currentTime.toISOString(),
+            startTime: currentTime.format("hh:mm A"),
+            endTS: nextTime.toISOString(),
+            endTime: nextTime.format("hh:mm A"),
+          });
+        }
+      }
       currentTime = nextTime;
     }
 
     console.log(
-      "Current IST time:",
-      now.format("YYYY-MM-DD HH:mm:ss A"),
-      "Available slots for today:",
+      `Current IST time: ${now.format("YYYY-MM-DD HH:mm:ss A")}, Available slots for ${day}:`,
       availableSlots
     );
     return availableSlots;
   } catch (err) {
-    console.error("Error fetching available time slots:", err);
-    return []; // Return empty array to trigger "No available slots" message
+    console.error(`Error fetching available time slots: ${err.message}`.red);
+    return [];
   }
 };
 
@@ -100,10 +95,7 @@ async function bookTimeSlot(startTS, name, clientEmail) {
   const appointmentEndTime = moment(appointmentStartTime).add(30, "minutes");
 
   console.log(
-    "Booking appointment - startTS:",
-    startTS,
-    "Parsed IST:",
-    appointmentStartTime.format("YYYY-MM-DD hh:mm A")
+    `Booking appointment - startTS: ${startTS}, Parsed IST: ${appointmentStartTime.format("YYYY-MM-DD hh:mm A")}`
   );
 
   const event = {
@@ -118,6 +110,8 @@ async function bookTimeSlot(startTS, name, clientEmail) {
       dateTime: appointmentEndTime.toISOString(),
       timeZone: "Asia/Kolkata",
     },
+    attendees: clientEmail ? [{ email: clientEmail }] : [],
+    sendUpdates: clientEmail ? "all" : "none",
     reminders: {
       useDefault: false,
       overrides: [
@@ -127,23 +121,18 @@ async function bookTimeSlot(startTS, name, clientEmail) {
     },
   };
 
-  if (clientEmail) {
-    event.attendees = [{ email: clientEmail }];
-    event.sendUpdates = "all";
-  }
-
   try {
     const response = await calendar.events.insert({
       calendarId: calendarId,
       resource: event,
       sendNotifications: !!clientEmail,
     });
-    console.log("Event created: %s", response.data.htmlLink);
+    console.log(`Event created: ${response.data.htmlLink}`.green);
     return response.data;
   } catch (err) {
-    console.error("Error creating event:", err);
+    console.error(`Error creating event: ${err.message}`.red);
     if (err.code === 403 || err.message.includes("delegation")) {
-      console.log("Retrying without attendees due to permission error...");
+      console.log("Retrying without attendees due to permission error...".yellow);
       delete event.attendees;
       delete event.sendUpdates;
       const retryResponse = await calendar.events.insert({
@@ -151,10 +140,7 @@ async function bookTimeSlot(startTS, name, clientEmail) {
         resource: event,
         sendNotifications: false,
       });
-      console.log(
-        "Event created without attendees: %s",
-        retryResponse.data.htmlLink
-      );
+      console.log(`Event created without attendees: ${retryResponse.data.htmlLink}`.green);
       return retryResponse.data;
     }
     throw err;
