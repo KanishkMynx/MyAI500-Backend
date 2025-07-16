@@ -127,16 +127,6 @@
 
 
 
-
-
-
-
-
-
-
-
-
-
 require("colors");
 const { createClient, LiveTranscriptionEvents } = require("@deepgram/sdk");
 const { Buffer } = require("node:buffer");
@@ -150,6 +140,7 @@ class TranscriptionService extends EventEmitter {
     this.finalResult = "";
     this.speechFinal = false;
     this.connectionReady = false;
+    this.reinitializeOnClose = true; // Flag to control reinitialization
     this.connectionPromise = this.initializeDeepgram();
     this.initializeEventHandlers();
   }
@@ -216,10 +207,11 @@ class TranscriptionService extends EventEmitter {
     }
   }
 
-  close() {
+  close(reinitialize = true) {
     if (this.dgConnection.getReadyState() === 1) {
       this.dgConnection.finish();
       clearInterval(this.keepAliveInterval);
+      this.reinitializeOnClose = reinitialize; // Set reinitialization behavior
     }
   }
 
@@ -262,11 +254,16 @@ class TranscriptionService extends EventEmitter {
       this.emit("error", error);
     });
 
-    this.dgConnection.on(LiveTranscriptionEvents.Close, () => {
+    this.dgConnection.on(LiveTranscriptionEvents.Close, async () => {
       console.log("STT -> Deepgram connection closed".yellow);
       this.connectionReady = false;
       clearInterval(this.keepAliveInterval);
       this.emit("close");
+      if (this.reinitializeOnClose) {
+        console.log("Reinitializing Deepgram connection due to close event...".cyan);
+        this.connectionPromise = this.initializeDeepgram();
+        await this.waitForConnection();
+      }
     });
   }
 }

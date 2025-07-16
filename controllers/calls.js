@@ -750,13 +750,6 @@
 
 
 
-
-
-
-
-
-
-
 const twilio = require("twilio");
 const { VoiceResponse } = require("twilio").twiml;
 const { callModel } = require("../models/call");
@@ -1013,7 +1006,7 @@ const callConnection = async (ws, req) => {
                   { $set: { prompts: [{ role: "assistant", content: initialPrompt }] } },
                   { upsert: true }
                 );
-                transcriptionService.close();
+                // Do not close transcriptionService here to keep it alive for future calls
               }
             } catch (err) {
               console.error(`Error processing WebSocket message: ${err.message}`.red);
