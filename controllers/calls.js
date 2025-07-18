@@ -898,6 +898,9 @@ const callConnection = async (ws, req) => {
     let audioBuffer = Buffer.alloc(0);
     const chunkSize = 800;
     let lastReceiveTime = null;
+    let currentTranscriptionService = null;
+    let currentGptService = null;
+    let currentStreamService = null;
 
     ws.on("error", (err) => {
       console.error(`WebSocket error: ${err.message}`.red);
@@ -911,6 +914,8 @@ const callConnection = async (ws, req) => {
           callSid = msg.start.callSid;
           callStartTime = new Date();
 
+          console.log(`New call starting: ${callSid}`.green);
+
           if (!Object.keys(agentMap).length) {
             await loadAgents();
           }
@@ -918,20 +923,33 @@ const callConnection = async (ws, req) => {
           const incomingNumber = normalizePhoneNumber(callSidToCalledNumber.get(callSid)) || "+17602786311";
           agentType = agentMap[incomingNumber] || "booking";
 
-          const gptService = new GptService(agentType);
-          const streamService = new StreamService(ws);
-
-          if (!transcriptionService.connectionReady) {
-            console.log("Reinitializing Deepgram connection...".cyan);
+          // Initialize services
+          currentGptService = new GptService(agentType);
+          currentStreamService = new StreamService(ws);
+          
+          // Reset or initialize transcription service
+          try {
+            if (!transcriptionService.connectionReady) {
+              console.log("Initializing Deepgram connection...".cyan);
+              await transcriptionService.initializeDeepgram();
+              await transcriptionService.waitForConnection();
+            } else {
+              console.log("Resetting existing Deepgram connection...".cyan);
+              await transcriptionService.reset();
+            }
+            console.log("Deepgram connection ready".green);
+          } catch (error) {
+            console.error(`Failed to initialize Deepgram: ${error.message}`.red);
+            // Try to create a new connection
             await transcriptionService.initializeDeepgram();
             await transcriptionService.waitForConnection();
           }
-          console.log("Using pre-warmed Deepgram connection".green);
 
-          streamService.setStreamSid(streamSid);
-          gptService.setCallSid(callSid);
+          currentStreamService.setStreamSid(streamSid);
+          currentGptService.setCallSid(callSid);
 
-          transcriptionService.on("error", (error) => {
+          // Set up transcription error handling for this call
+          const transcriptionErrorHandler = (error) => {
             console.error(`Transcription error: ${error.message || "Unknown error"}`.red);
             transcriptionErrorCount++;
             if (!isSpeaking && transcriptionErrorCount < 3) {
@@ -948,11 +966,17 @@ const callConnection = async (ws, req) => {
               isSpeaking = true;
               setTimeout(() => ws.close(1000, "Persistent transcription failure"), 2000);
             }
-          });
+          };
 
-          transcriptionService.on("close", () => {
-            console.log("Transcription service closed".yellow);
-          });
+          const transcriptionCloseHandler = () => {
+            console.log("Transcription service closed for this call".yellow);
+          };
+
+          // Remove any existing listeners and add new ones
+          transcriptionService.removeAllListeners("error");
+          transcriptionService.removeAllListeners("close");
+          transcriptionService.on("error", transcriptionErrorHandler);
+          transcriptionService.on("close", transcriptionCloseHandler);
 
           let agentDoc = await agentModel.findOne({ name: agentType }).lean();
           if (!agentDoc) {
@@ -971,6 +995,72 @@ const callConnection = async (ws, req) => {
 
           let interactionCount = 0;
 
+          // Set up utterance handler for this call
+          const utteranceHandler = (text) => {
+            console.log(`Utterance received: "${text}", isSpeaking: ${isSpeaking}, marks: ${marks.length}`.cyan);
+            if (marks.length && text?.length > 2 && isSpeaking) {
+              console.log(`Triggering interruption for utterance: "${text}"`.cyan);
+              ws.send(JSON.stringify({ streamSid, event: "clear" }));
+              currentGptService.interrupt();
+              isSpeaking = false;
+            }
+          };
+
+          // Set up transcription handler for this call
+          const transcriptionHandler = async (text) => {
+            if (text && text.length > 0) {
+              console.log(`Final transcription: "${text}" at ${new Date().toISOString()}`.green);
+              const timeSinceLastReceive = lastReceiveTime ? Number(process.hrtime.bigint() - lastReceiveTime) / 1000000 : 0;
+              console.log(`Time since audio received: ${timeSinceLastReceive}ms`);
+              
+              transcript.push({ role: "user", content: text });
+              
+              // Extract user info if present
+              const nameMatch = text.match(/(?:my name is|i'm|i am)\s+([a-zA-Z]+)/i);
+              const emailMatch = text.match(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i);
+              
+              if (nameMatch) {
+                username = nameMatch[1];
+                console.log(`Extracted username: ${username}`.blue);
+              }
+              
+              if (emailMatch) {
+                email = emailMatch[1];
+                console.log(`Extracted email: ${email}`.blue);
+              }
+              
+              await currentGptService.completion(text, interactionCount);
+              interactionCount++;
+            }
+          };
+
+          // Remove existing listeners and add new ones
+          transcriptionService.removeAllListeners("utterance");
+          transcriptionService.removeAllListeners("transcription");
+          transcriptionService.on("utterance", utteranceHandler);
+          transcriptionService.on("transcription", transcriptionHandler);
+
+          // Set up GPT reply handler
+          currentGptService.on("gptreply", async (gptReply, icount) => {
+            console.log(`GPT reply: "${gptReply.partialResponse}" at ${new Date().toISOString()}`.blue);
+            ttsService.generate(gptReply, icount);
+            transcript.push({ role: "assistant", content: gptReply.partialResponse });
+            isSpeaking = true;
+          });
+
+          // Hook for TTS speech audio to be sent through the stream
+          ttsService.on("speech", (responseIndex, audio, label, icount) => {
+            console.log(`TTS generated at ${new Date().toISOString()}`.cyan);
+            currentStreamService.sendAudio(audio);
+          });
+
+          // Optional: Add this if you're still using marks
+          currentStreamService.on("audiosent", (markLabel) => {
+            marks.push(markLabel);
+          });
+
+
+          // Handle subsequent WebSocket messages
           ws.on("message", async (data) => {
             try {
               const msg = JSON.parse(data);
@@ -981,15 +1071,25 @@ const callConnection = async (ws, req) => {
 
                 while (audioBuffer.length >= chunkSize) {
                   const chunk = audioBuffer.slice(0, chunkSize);
-                  await transcriptionService.waitForConnection();
-                  transcriptionService.send(chunk.toString("base64"));
+                  try {
+                    await transcriptionService.waitForConnection();
+                    await transcriptionService.send(chunk.toString("base64"));
+                  } catch (error) {
+                    console.error(`Error sending audio chunk: ${error.message}`.red);
+                  }
                   audioBuffer = audioBuffer.slice(chunkSize);
                 }
               } else if (msg.event === "mark") {
-                marks.splice(marks.indexOf(msg.mark.name), 1);
+                const markIndex = marks.indexOf(msg.mark.name);
+                if (markIndex !== -1) {
+                  marks.splice(markIndex, 1);
+                }
                 isSpeaking = false;
               } else if (msg.event === "stop") {
+                console.log(`Call ending: ${callSid}`.yellow);
                 callEndTime = new Date();
+                
+                // Save call data
                 await callModel.create({
                   callStartTime,
                   callEndTime,
@@ -1001,108 +1101,46 @@ const callConnection = async (ws, req) => {
                   transcript,
                   agentType,
                 });
+                
                 await agentModel.updateOne(
                   { name: agentType },
                   { $set: { prompts: [{ role: "assistant", content: initialPrompt }] } },
                   { upsert: true }
                 );
-                // Do not close transcriptionService here to keep it alive for future calls
+
+                // Clean up event listeners for this call
+                transcriptionService.removeListener("error", transcriptionErrorHandler);
+                transcriptionService.removeListener("close", transcriptionCloseHandler);
+                transcriptionService.removeListener("utterance", utteranceHandler);
+                transcriptionService.removeListener("transcription", transcriptionHandler);
+                
+                // Keep transcription service alive for future calls
+                console.log("Call ended, keeping transcription service alive for future calls".cyan);
               }
             } catch (err) {
               console.error(`Error processing WebSocket message: ${err.message}`.red);
             }
           });
 
-          transcriptionService.on("utterance", (text) => {
-            console.log(`Utterance received: "${text}", isSpeaking: ${isSpeaking}, marks: ${marks.length}`.cyan);
-            if (marks.length && text?.length > 2 && isSpeaking) {
-              console.log(`Triggering interruption for utterance: "${text}"`.cyan);
-              ws.send(JSON.stringify({ streamSid, event: "clear" }));
-              gptService.interrupt();
-              isSpeaking = false;
-            }
+          // Handle WebSocket close
+          ws.on("close", () => {
+            console.log(`WebSocket closed for call: ${callSid}`.yellow);
+            // Clean up listeners
+            transcriptionService.removeListener("error", transcriptionErrorHandler);
+            transcriptionService.removeListener("close", transcriptionCloseHandler);
+            transcriptionService.removeListener("utterance", utteranceHandler);
+            transcriptionService.removeListener("transcription", transcriptionHandler);
           });
 
-          transcriptionService.on("transcription", async (text) => {
-            if (!text) return;
-            if (isSpeaking) {
-              await new Promise(resolve => setTimeout(resolve, 50));
-            }
-
-            console.log(`Final transcription: "${text}" at ${new Date().toISOString()}`.green);
-            if (lastReceiveTime) {
-              const transcriptionTime = process.hrtime.bigint();
-              console.log(`Time since audio received: ${Number(transcriptionTime - lastReceiveTime) / 1e6}ms`.green);
-            }
-
-            transcript.push({ user: text, gpt: "", timestamp: formatISTTime(new Date()) });
-
-            if (interactionCount === 2 && text.toLowerCase().includes("my name is")) {
-              username = text.toLowerCase().replace("my name is", "").trim();
-            }
-            if (interactionCount === 3 && text.toLowerCase().includes("gmail")) {
-              email = text.toLowerCase().replace(/\s/g, "") + "@gmail.com";
-            }
-
-            try {
-              if (text.toLowerCase().includes("transfer") && text.toLowerCase().includes("call")) {
-                ws.send(JSON.stringify({ streamSid, event: "clear" }));
-                const transferPrompt = "Sure, I’m transferring you to a human agent now. Whom would you like to speak to?";
-                ttsService.generate({ partialResponseIndex: null, partialResponse: transferPrompt }, interactionCount);
-                isSpeaking = true;
-                await gptService.completion("User requested to transfer the call.", interactionCount, "system", "system");
-              } else {
-                await gptService.completion(text, interactionCount);
-              }
-              interactionCount++;
-              errorCount = 0;
-              transcriptionErrorCount = 0;
-            } catch (err) {
-              console.error(`Error in GPT completion: ${err.message}`.red);
-              errorCount++;
-              const errorMessage = errorCount > 3
-                ? "I'm having trouble. Would you like to transfer to a human agent?"
-                : "Sorry, I hit a snag. Let's try again.";
-              ws.send(JSON.stringify({ streamSid, event: "clear" }));
-              ttsService.generate({ partialResponseIndex: null, partialResponse: errorMessage }, interactionCount);
-              isSpeaking = true;
-              if (errorCount > 3) errorCount = 0;
-            }
-          });
-
-          gptService.on("gptreply", async (gptReply, icount) => {
-            if (isSpeaking) {
-              await new Promise(resolve => setTimeout(resolve, 50));
-            }
-            const now = new Date();
-            console.log(`GPT reply: "${gptReply.partialResponse}" at ${new Date().toISOString()}`.cyan);
-            if (transcript[icount]) {
-              transcript[icount].gpt = gptReply.partialResponse;
-              transcript[icount].timestamp = transcript[icount].timestamp || formatISTTime(now);
-            } else {
-              transcript.push({ user: "", gpt: gptReply.partialResponse, timestamp: formatISTTime(now) });
-            }
-            ttsService.generate(gptReply, icount);
-            isSpeaking = true;
-          });
-
-          ttsService.on("speech", (responseIndex, audio, label, icount) => {
-            console.log(`TTS generated at ${new Date().toISOString()}`.cyan);
-            streamService.sendAudio(audio);
-          });
-
-          streamService.on("audiosent", (markLabel) => {
-            marks.push(markLabel);
-          });
         }
       } catch (err) {
-        console.error(`Error in callConnection: ${err.message}`.red);
-        ws.close(1011, "Internal server error");
+        console.error(`Error processing WebSocket start message: ${err.message}`.red);
       }
     });
+
   } catch (err) {
     console.error(`Error in callConnection: ${err.message}`.red);
-    ws.close(1011, "Internal server error");
+    ws.close(1000, "Server error");
   }
 };
 
